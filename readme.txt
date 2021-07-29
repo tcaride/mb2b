@@ -1,0 +1,1 @@
+Este repositorio contiene las queries de analisis B2B.
