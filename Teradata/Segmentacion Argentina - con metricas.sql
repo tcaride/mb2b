@@ -1,44 +1,6 @@
-/* SEGMENTACION ARGENTINA TERADATA: Actualizada al 11-08-2021. Tiene solo las empresas */
+/* SEGMENTACION ARGENTINA TERADATA. Tiene solo las empresas */
 
------------------------------ 00.A Creo la base de cust de empresas  ------------------------------------------
---drop table d00_cust_ar;
-CREATE MULTISET VOLATILE TABLE d00_cust_ar AS (
-
--- Traigo company de Customer. Cantidad:67300
-SELECT DISTINCT CUS_CUST_ID FROM LK_CUS_CUSTOMERS_DATA
-WHERE (COALESCE(CUS_TAGS, '') <> 'sink') AND (sit_site_id_cus in ('MLA')) AND 
-(cus_cust_doc_type IN ('CUIL','CUIT') AND (left(cus_cust_doc_number,1)='3'  OR left(cus_cust_doc_number,1)='55'))
-
-UNION
-
--- Traigo company de KYC. Cantidad: 36528
-SELECT  DISTINCT CUS_CUST_ID FROM LK_KYC_CUSTOMERS 
-WHERE (cus_doc_type IN ('CUIL','CUIT') AND (left(cus_doc_number,1)='3' OR left(cus_doc_number,1)='55' ))
-
-UNION
--- Traigo company de KYC2. Cantidad: 2908056
-SELECT DISTINCT cus_cust_id FROM BT_MP_KYC_LEVEL WHERE CUS_KYC_ENTITY_TYPE IN('company') AND sit_site_id= 'MLA'
-
-UNION
--- Traigo company de R1 2289259 (169763)
--- select  count(distinct REG_CUST_DOC_NUMBER) from LK_REG_PERSON where REG_DATA_TYPE IN('company') and sit_site_id= 'MLA'
-
--- Traigo company de R. Cantidad: 137825
-SELECT DISTINCT CUS_CUST_ID FROM LK_REG_CUSTOMERS
-WHERE (REG_CUST_DOC_NUMBER IS NOT NULL AND REG_CUST_DOC_TYPE IN ('CUIL','CUIT') AND (left(REG_CUST_DOC_NUMBER,1)='3' OR left(REG_CUST_DOC_NUMBER,1)='55' ) AND sit_site_id= 'MLA')
-) WITH data primary index (CUS_CUST_ID) on commit preserve rows;
-
------------------------------ 00.B Elimino los cust duplicados  ------------------------------------------
-
-CREATE MULTISET VOLATILE TABLE d01_cust_ar AS (
-SELECT distinct a.cus_cust_id from d00_cust_ar a
-LEFT JOIN LK_CUS_CUSTOMERS_DATA b
-ON a.cus_cust_id = b.cus_cust_id
-WHERE (COALESCE(b.CUS_TAGS, '') <> 'sink')
-) WITH data primary index (CUS_CUST_ID) on commit preserve rows;
-
-
------------------------------ 01.A. Uno datos Mercado Pago y Marketplace  ------------------------------------------
+----------------------------- 01. Traigo ventas: Uno datos Mercado Pago y Marketplace  ------------------------------------------
 
 /* Comment Tomas: Traigo todos los datos de Mercado Pago de ventas por seller y canal */
 
@@ -56,7 +18,6 @@ AND mp.sit_site_id IN ('MLA')
 AND MP.PAY_MOVE_DATE BETWEEN DATE '2020-01-01' AND DATE '2020-12-31'
 AND mp.pay_status_id IN ( 'approved')--, 'authorized')
 AND tpv_segment_id <> 'ON'--AND coalesce(i.ITE_TIPO_PROD,0) <> 'U' -----> Saco todo lo que es Marketplace
-AND cus_cust_id_sel IN (SELECT * FROM d01_cust_ar)
 GROUP BY 1,2,3,4
 
 UNION --- para poder hacer union las dos tablas son iguales
@@ -78,16 +39,12 @@ AND bid.ite_gmv_flag = 1
 AND bid.mkt_marketplace_id = 'TM'
 AND coalesce(BID.AUTO_OFFER_FLAG, 0) <> 1
 AND coalesce(bid.BID_FVF_BONIF, 'Y') = 'N'
-AND cus_cust_id_sel IN (SELECT * FROM d01_cust_ar)
-
 GROUP BY 1,2,3,4
-
 ) WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) on commit preserve rows;
 
------------------------------ 01.B Agrego Volumen de ventas por seller.  ------------------------------------------
+----------------------------- 02. Agrupo Volumen de ventas por seller.  ------------------------------------------
 
 CREATE multiset volatile TABLE TPV_SEL as ( --- sumo los volumenes por seller --- volumen total por seller
-
 SELECT
   cus_cust_id_sel,
   sit_site_id,
@@ -96,11 +53,11 @@ SELECT
   COUNT(distinct tpv_segment_id) Q_SEG
 FROM TPV_SEL_1
 GROUP BY 1,2
-) with data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) on commit preserve rows;
+) WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) on commit preserve rows;
 
------------------------------ 02. Query para tener el segmento de MP, tomo el mayor puede que haya seller en mas de un segmento -----------------------------------------
+----------------------------- 03. Query para tener el segmento de MP, tomo el mayor puede que haya seller en mas de un segmento -----------------------------------------
 
-CREATE multiset volatile TABLE SEG_SEL as ( --- me quedo con el segmento del seller con mas ventas --- segmento por seller
+CREATE multiset volatile TABLE SEG_SEL as ( 
 SELECT
   SP.cus_cust_id_sel,
   SP.sit_site_id,
@@ -115,23 +72,34 @@ qualify row_number () over (partition by sp.cus_cust_id_sel, sp.sit_site_id orde
 GROUP BY 1,2,3,4,5,6
 ) with data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) on commit preserve rows;
 
------------------------------ 03. Agrego compras por seller y categoria ------------------------------------------
+----------------------------- 04. Agrupo volumen de compras por buyer y categoria ------------------------------------------
 
 CREATE MULTISET VOLATILE TABLE BGMV_BUY AS ( --- compras en el marketplace por empresa
 SELECT
     bid.cus_cust_id_buy,  
     bid.sit_site_id,
-    sum((case when tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Computación','Herramientas y Construcción','Industrias y Oficinas','Electrónica, Audio y Video','Arte, Librería y Mercería') then (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) else 0.0 end )) TGMV_COMP,
-    sum((case when tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Acessórios para Veículos') then (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) else 0.0 end )) TGMV_AUTO,
-    sum((case when tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Beleza e Cuidado Pessoal') then (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) else 0.0 end )) TGMV_BEAUTY,
-    sum((case when tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Computación','Electrónica, Audio y Video','Electrodomésticos','Celulares y Teléfonos','Cámaras Digitales y Foto') then (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) else 0.0 end))  TGMV_CE,
-    sum((Case when tgmv_flag = 1 then (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) else 0.0 end))  GMVEBILLABLE,
-    COUNT((Case when  tgmv_flag = 1 then BID.BID_QUANTITY_OK else 0.0 end))  TORDERS_BUY,
-    sum((Case when  tgmv_flag = 1 then BID.BID_QUANTITY_OK else 0.0 end))  TSIE_BUY,
+    SUM((CASE WHEN tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Computación','Herramientas y Construcción','Industrias y Oficinas', 'Electrónica','Electrónica, Audio y Video','Arte, Librería y Mercería','Arte y Artesanías','Arte y Antigüedades') 
+          THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) 
+          ELSE 0.0 
+        END )) TGMV_COMP,
+    SUM((CASE WHEN tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Acessórios para Veículos','Accesorios para Vehículos') 
+          THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) 
+          ELSE 0.0 
+        END )) TGMV_AUTO,
+    SUM((CASE WHEN tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Computación','Electrónica','Electrónica, Audio y Video','Electrodomésticos','Electrodomésticos y Aire Acond','Electrodomésticos y Aires Ac.','Celulares y Teléfonos','Celulares y Telefonía','Cámaras Digitales y Foto','Cámaras Digitales y Foto.','Cámaras y Accesorios') 
+          THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK)
+          ELSE 0.0 
+        END))  TGMV_CE,
+    SUM((CASE WHEN tgmv_flag = 1 
+          THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) 
+          ELSE 0.0 
+        END))  GMVEBILLABLE, -- TGMV
+    COUNT((CASE WHEN tgmv_flag = 1 then BID.BID_QUANTITY_OK else 0.0 end))  TORDERS_BUY,
+    SUM((CASE WHEN tgmv_flag = 1 then BID.BID_QUANTITY_OK else 0.0 end))  TSIE_BUY, -- TSI
     COUNT(distinct (case when bid.crt_purchase_id is null then bid.ord_order_id else bid.crt_purchase_id end)) as TX_BUY
-    --sum( (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) )  GMVE
+
 FROM WHOWNER.BT_BIDS AS bid
-LEFT JOIN WHOWNER.LK_ITE_ITEMS_PH ite
+LEFT JOIN WHOWNER.LK_ITE_ITEMS_PH ite 
 on (bid.ITE_ITEM_ID = ite.ITE_ITEM_ID AND    
 bid.PHOTO_ID = ite.PHOTO_ID AND    
 bid.SiT_SITE_ID = ite.SIT_SITE_ID)  
@@ -147,11 +115,48 @@ AND bid.tim_day_winning_date BETWEEN DATE '2020-01-01' AND DATE '2020-12-31'
 AND bid.ite_gmv_flag = 1
 AND bid.mkt_marketplace_id = 'TM'
 AND tgmv_flag = 1
-AND bid.cus_cust_id_buy IN (SELECT * FROM d01_cust_ar)
 GROUP BY 1,2
 )WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy) ON COMMIT PRESERVE ROWS;
 
------------------------------ 04. Traigo el regimen fiscal del cust: Para argentina no son consistentes los datos pero mantengo para mantener las columnas ------------------------------------------
+----------------------------- 05. Traigo los Q en los que hizo compras. -----------------------------------------
+
+CREATE MULTISET VOLATILE TABLE BGMV_TIPO_COMPRADOR AS ( --- compras en el marketplace por usuario 
+SELECT
+    bid.cus_cust_id_buy,  
+    bid.sit_site_id,
+     ((CAST(EXTRACT(MONTH FROM bid.TIM_DAY_WINNING_DATE) AS BYTEINT)-1)/3)+1
+  || 'Q' || substring(bid.TIM_DAY_WINNING_DATE,3,2) quarter,    
+    COUNT(distinct (case when bid.crt_purchase_id is null then bid.ord_order_id else bid.crt_purchase_id end)) as TX_BUY
+FROM WHOWNER.BT_BIDS as bid
+WHERE bid.sit_site_id IN ('MLA')
+AND bid.photo_id = 'TODATE' 
+AND bid.tim_day_winning_date between DATE '2020-01-01' AND DATE '2020-12-31'
+AND bid.ite_gmv_flag = 1
+AND bid.mkt_marketplace_id = 'TM'
+AND tgmv_flag = 1
+group by 1,2,3
+)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy) ON COMMIT PRESERVE ROWS;
+
+----------------------------- 06. Categorizo tipo de comprador -----------------------------------------
+
+CREATE MULTISET VOLATILE TABLE BGMV_TIPO_COMPRADOR_2 AS (
+SELECT
+    tcb.cus_cust_id_buy,  
+    tcb.sit_site_id,
+    CASE WHEN cdt.cus_first_buy_no_bonif_autoof <= '2020-01-01' then 'OK'
+      WHEN cdt.cus_first_buy_no_bonif_autoof <= '2020-03-31' then '3Q'
+      WHEN cdt.cus_first_buy_no_bonif_autoof <= '2020-06-30' then '2Q'
+      WHEN cdt.cus_first_buy_no_bonif_autoof <= '2020-09-30' then '1Q'
+    ELSE 'Menos 1Q'  end as Q_cuenta,
+    CASE WHEN cdt.cus_first_buy_no_bonif_autoof IS null THEN 'Nunca Compro' ELSE 'Compro' END AS NB,
+    COUNT(distinct quarter) cant_q_compras  
+FROM BGMV_TIPO_COMPRADOR tcb
+LEFT JOIN WHOWNER.LK_CUS_CUSTOMER_DATES CDT ON CDT.CUS_CUST_ID=tcb.CUS_CUST_ID_BUY AND CDT.sit_site_id=tcb.SIT_SITE_ID
+group by 1,2,3,4
+
+)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy) ON COMMIT PRESERVE ROWS;
+
+----------------------------- 07. Traigo el regimen fiscal del cust: Para argentina no son consistentes los datos pero mantengo para mantener las columnas ------------------------------------------
 
 CREATE multiset volatile TABLE br_mx as ( -- tipo de regimen
 SELECT
@@ -164,7 +169,7 @@ WHERE cus_cust_id  IN (SELECT * FROM d01_cust_ar) AND sit_site_id IN ('MLA')
 qualify row_number () over (partition by cus_cust_id, sit_site_id ORDER BY  aud_upd_dt DESC) = 1
 ) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
 
------------------------------ 05. Traigo rubro ------------------------------------------
+----------------------------- 08. Traigo rubro ------------------------------------------
 
 CREATE multiset volatile TABLE lastmcc3 as ( --- rubro
 SELECT * FROM (
@@ -177,13 +182,12 @@ SELECT * FROM (
   FROM
     WHOWNER.LK_CUS_CUSTOMER_MCC MCC
     WHERE mcc_source='USER_ASSIGN'
-    AND mcc.cus_cust_id  IN (SELECT * FROM d01_cust_ar)
   ) DAT2
   WHERE MAX_NUM_IND = 'Y'
   qualify row_number () over (partition by  cus_cust_id, sit_site_id order by mcc_last_adding_datetime DESC) = 1
 ) with data primary index (cus_cust_id) on commit preserve rows;
 
------------------------------ 06. Agrupo el rubro ------------------------------------------
+----------------------------- 9. Agrupo el rubro ------------------------------------------
 
 CREATE multiset volatile TABLE lastmcc4 as (
 SELECT
@@ -215,7 +219,7 @@ GROUP BY 1,2,3,4,5,6
 --having count(*)>1
 ) with data primary index (cus_cust_id) on commit preserve rows;
 
------------------------------ 07. Traigo vertical maxima ------------------------------------------
+----------------------------- 10. Traigo vertical maxima ------------------------------------------
 
 CREATE multiset volatile TABLE vert as ( -- vertical maxima
 SELECT
@@ -250,11 +254,10 @@ AND bid.ite_gmv_flag = 1
 AND bid.mkt_marketplace_id = 'TM'
 AND coalesce(BID.AUTO_OFFER_FLAG, 0) <> 1
 AND coalesce(bid.BID_FVF_BONIF, 'Y') = 'N'
-AND bid.cus_cust_id_sel  IN (SELECT * FROM d01_cust)
 group by 1,2,3
 ) with data primary index (sit_site_id,cus_cust_id_sel) on commit preserve rows;
 
---- 08. Agrupo Vertical
+--- 11. Agrupo Vertical
 
 CREATE multiset volatile TABLE vert2 AS ( -- vertical maxima
 SELECT
@@ -267,7 +270,7 @@ FROM vert
 qualify row_number () over (partition by cus_cust_id_sel, sit_site_id order by  GMVEBILLABLE DESC) = 1
 ) with data primary index (sit_site_id,cus_cust_id_sel) on commit preserve rows;
 
---- 09. Cuento la cantidad de verticales que vende
+--- 12. Cuento la cantidad de verticales que vende
 
 CREATE multiset volatile TABLE vert3 as ( --- cantidad de verticales de vta
 SELECT
@@ -278,58 +281,8 @@ FROM vert
 GROUP BY 1,2
 ) with data primary index (sit_site_id,cus_cust_id_sel) on commit preserve rows;
 
---- 10. Traigo fechas y compras comprador
 
-CREATE MULTISET VOLATILE TABLE BGMV_TIPO_COMPRADOR AS ( --- compras en el marketplace por usuario 
-SELECT
-    bid.cus_cust_id_buy,  
-    bid.sit_site_id,
-     ((CAST(EXTRACT(MONTH FROM bid.TIM_DAY_WINNING_DATE) AS BYTEINT)-1)/3)+1
-  || 'Q' || substring(bid.TIM_DAY_WINNING_DATE,3,2) quarter,    
-    --sum((Case when tgmv_flag = 1 then (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) else 0.0 end))  GMVEBILLABLE,
-    ---COUNT((Case when  tgmv_flag = 1 then BID.BID_QUANTITY_OK else 0.0 end))  TORDERS_BUY,
-   	-- sum((Case when  tgmv_flag = 1 then BID.BID_QUANTITY_OK else 0.0 end))  TSIE_BUY,
-  	COUNT(distinct (case when bid.crt_purchase_id is null then bid.ord_order_id else bid.crt_purchase_id end)) as TX_BUY
-    --sum( (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) )  GMVE
-
-FROM WHOWNER.BT_BIDS as bid
-LEFT JOIN WHOWNER.LK_ITE_ITEMS_PH ite
-ON 	(bid.ITE_ITEM_ID = ite.ITE_ITEM_ID AND     
-bid.PHOTO_ID = ite.PHOTO_ID AND     
-bid.SiT_SITE_ID = ite.SIT_SITE_ID)   
-LEFT JOIN WHOWNER.AG_LK_CAT_CATEGORIES_PH AS cat    
-on (ite.sit_site_id = cat.sit_site_id AND ite.cat_Categ_id = cat.cat_Categ_id_l7 AND cat.photo_id = 'TODATE')  
-
-WHERE bid.sit_site_id IN ('MLA')
-AND bid.photo_id = 'TODATE' 
-AND bid.tim_day_winning_date between DATE '2020-01-01' AND DATE '2020-12-31'
-AND bid.ite_gmv_flag = 1
-AND bid.mkt_marketplace_id = 'TM'
-AND tgmv_flag = 1
-AND bid.cus_cust_id_buy  IN (SELECT * FROM d01_cust)
-group by 1,2,3
-)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy) ON COMMIT PRESERVE ROWS;
-
---- 11. Categorizo tipo de comprador
-
-CREATE MULTISET VOLATILE TABLE BGMV_TIPO_COMPRADOR_2 AS (
-SELECT
-  	tcb.cus_cust_id_buy,  
-  	tcb.sit_site_id,
-   	CASE WHEN cdt.cus_first_buy_no_bonif_autoof <= '2020-01-01' then 'OK'
-  		WHEN cdt.cus_first_buy_no_bonif_autoof <= '2020-03-31' then '3Q'
- 	  	WHEN cdt.cus_first_buy_no_bonif_autoof <= '2020-06-30' then '2Q'
-  		WHEN cdt.cus_first_buy_no_bonif_autoof <= '2020-09-30' then '1Q'
-   	ELSE 'Menos 1Q'  end as Q_cuenta,
-    CASE WHEN cdt.cus_first_buy_no_bonif_autoof IS null THEN 'Nunca Compro' ELSE 'Compro' END AS NB,
-  	COUNT(distinct quarter) cant_q_compras  
-FROM BGMV_TIPO_COMPRADOR tcb
-LEFT JOIN WHOWNER.LK_CUS_CUSTOMER_DATES CDT ON CDT.CUS_CUST_ID=tcb.CUS_CUST_ID_BUY AND CDT.sit_site_id=tcb.SIT_SITE_ID
-group by 1,2,3,4
-
-)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy) ON COMMIT PRESERVE ROWS;
-
------------------------------ 12. Traigo cantidad de integrados por seller ------------------------------------------
+----------------------------- 13. Traigo cantidad de integrados por seller ------------------------------------------
 
 CREATE multiset volatile TABLE intergrados as ( --- cantidad de integraciones a partir del get
 SELECT
@@ -339,11 +292,10 @@ COUNT(*) CANT_INTEGRADOS
 FROM  WHOWNER.lk_op_active_users us
 WHERE us.date_end >=  '2020-12-31' --- trae los que no finalizaron en 2020
 AND us.sit_site_id IN ('MLA')
-AND cus_cust_id  IN (SELECT * FROM d01_cust)
 group by 1,2
 ) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
 
------------------------------ 13. Trae la plata en cuenta de mercadopago ------------------------------------------
+----------------------------- 14. Trae la plata en cuenta de mercadopago ------------------------------------------
 
 CREATE multiset volatile TABLE account_money as (
 SELECT
@@ -353,11 +305,10 @@ SELECT
 FROM  BT_MP_SALDOS_SITE
 WHERE TIM_DAY BETWEEN DATE '2021-03-01' AND DATE '2021-04-30'
 AND sit_site_id IN ('MLA')
-AND cus_cust_id  IN (SELECT * FROM d01_cust)
 GROUP BY 1,2
 ) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
 
------------------------------ 14. Categoriza la account money ------------------------------------------
+----------------------------- 15. Categoriza la account money ------------------------------------------
 
 CREATE multiset volatile TABLE account_money2 as (
 SELECT
@@ -386,7 +337,7 @@ on am.CUS_CUST_ID=V.CUS_CUST_ID_SEL
 AND am.sit_site_id=V.sit_site_id
 ) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
 
------------------------------ 15. Trae datos de creditos ------------------------------------------
+----------------------------- 16. Trae datos de creditos ------------------------------------------
 
 CREATE multiset volatile TABLE credits as (
 SELECT
@@ -396,11 +347,10 @@ SELECT
 FROM WHOWNER.BT_MP_CREDITS
 WHERE CRD_CREDIT_FINISH_DATE_ID >= DATE '2020-01-01'
 AND sit_site_id='MLA'
-AND CUS_CUST_ID_BORROWER IN (SELECT * FROM d01_cust)
 GROUP BY 1,2
 ) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
 
------------------------------ 16. Trae datos de seguros ------------------------------------------
+----------------------------- 17. Trae datos de seguros ------------------------------------------
 
 CREATE multiset volatile TABLE seguros as (
 SELECT
@@ -409,11 +359,10 @@ SELECT
 FROM WHOWNER.BT_INSURANCE_PURCHASES
 WHERE INSUR_STATUS_ID = 'confirmed'
 and SIT_SITE_ID='MLA'
-AND CUS_CUST_ID_buy IN (SELECT * FROM d01_cust)
 GROUP BY 1
 ) with data primary index (cus_cust_id_buy) on commit preserve rows;
 
------------------------------ 17. Trae datos de shipping ------------------------------------------
+----------------------------- 18. Trae datos de shipping ------------------------------------------
 
 CREATE multiset volatile TABLE seller_shipping AS (
 SELECT
@@ -430,17 +379,23 @@ AND bid.ite_gmv_flag = 1
 AND bid.mkt_marketplace_id = 'TM'
 AND shp.shp_picking_type_id IN ('xd_drop_off','cross_docking','fulfillment')
 AND tgmv_flag = 1
-AND cus_cust_id_sel IN (SELECT * FROM d01_cust)
 group by 1,2
 ) with data primary index (sit_site_id,cus_cust_id_SEL) on commit preserve rows;
 
------------------------------ 16. Crea la tabla final ------------------------------------------
+----------------------------- 19. Crea la tabla final ------------------------------------------
+
+----------------------------- Creo la base de cust de empresas  ------------------------------------------
+/* Traigo los datos del Vault de KYC marcados como company segun las relglas para el entity type por pais:
+https://docs.google.com/presentation/d/1ExEk8mfT-Z9J6pibfZ8WUqegUOJzDYRpObmZLZzGVHs/edit#slide=id.g7735a7c26a_2_3
+Y elimino los usuarios sink de la tabla de customers, son usuarios creados para carritos y cosas internas.
+*/
+
 
 
 SELECT
-  a.cus_cust_id,
-  b.sit_site_id,
-  e.CUS_CUST_DOC_NUMBER,
+  a.CUS_CUST_ID,
+  a.SIT_SITE_ID,
+  a.KYC_IDENTIFICATION_NUMBER, --
   CASE WHEN b.tpv_segment_detail ='Aggregator - Other' THEN 'Online Payments' 
       WHEN b.tpv_segment_detail ='Instore' THEN 'QR'
       WHEN b.tpv_segment_detail ='Selling ML' THEN 'Selling Marketplace'
@@ -448,6 +403,10 @@ SELECT
       WHEN b.tpv_segment_detail is null then 'No Vende'
       ELSE 'Not Considered'
   END as Canal,
+  CASE WHEN Canal='QR' OR Canal='Point' THEN 'OF'
+    WHEN Canal='Selling Marketplace' OR Canal='Online Payments'
+    ELSE Canal 
+  END as Agg_Canal,
   b.SEGMENTO SEGMENTO_MKTPLACE,
   CASE WHEN b.tpv_segment_detail ='Selling ML' THEN d.vertical 
       ELSE c.MCC 
@@ -458,7 +417,7 @@ SELECT
     WHEN e.cus_internal_tags LIKE '%operator%' THEN 'Operador'
     ELSE 'OK' 
   END AS CUSTOMER,
-  'Company' AS REG_DATA_TYPE_group, --- tipo documento
+  a.KYC_ENTITY_TYPE AS REG_DATA_TYPE_group,
   f.cus_tax_payer_type,
   CASE WHEN g.GMVEBILLABLE IS NULL or g.GMVEBILLABLE=0 THEN 'No Compra' ELSE 'Compra' END  as TIPO_COMPRADOR_TGMV, 
   CASE WHEN h.VENTAS_USD IS null THEN 'a.No Vende'
@@ -529,7 +488,7 @@ SELECT
   COUNT(DISTINCT CASE WHEN g.cus_cust_id_buy is null THEN h.cus_cust_id_sel ELSE g.cus_cust_id_buy END) AS cust_total,
   COUNT(DISTINCT g.cus_cust_id_buy) cust_buy
 
-FROM d01_cust a
+FROM LK_KYC_VAULT_USER a
 LEFT JOIN Seg_Sel b ON a.cus_cust_id=b.cus_cust_id_sel
 LEFT JOIN lastmcc4 c ON a.cus_cust_id = c.cus_cust_id
 LEFT JOIN vert2 d ON a.cus_cust_id=d.cus_cust_id_sel
@@ -544,7 +503,10 @@ LEFT JOIN seguros l ON a.cus_cust_id=l.CUS_CUST_ID_buy
 LEFT JOIN credits m ON a.CUS_CUST_ID=m.CUS_CUST_ID
 LEFT JOIN seller_shipping n ON a.cus_cust_id=n.CUS_CUST_ID_sel
 LEFT JOIN BGMV_TIPO_COMPRADOR_2 o ON a.cus_cust_id=o.cus_cust_id_buy 
-GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27
+WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND ((a.KYC_ENTITY_TYPE = 'company' AND
+ (Tipo_Compras<>'No Compras' AND RANGO_VTA_PURO<> 'a.No Vende') )
+  OR (a.KYC_ENTITY_TYPE <> 'company' AND  h.VENTAS_USD >= 6000)) 
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28
 
 
 

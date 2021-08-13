@@ -134,7 +134,7 @@ SELECT
   cus_tax_payer_type,
   cus_tax_regime
 FROM LK_TAX_CUST_WRAPPER
-WHERE SIT_SITE_ID IN ('MLA')
+WHERE SIT_SITE_ID IN ('MLB','MLA','MLM','MLC')
 qualify row_number () over (partition by cus_cust_id, sit_site_id order by  aud_upd_dt DESC) = 1
 ) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
 
@@ -150,45 +150,12 @@ SELECT
         WHEN d.cus_internal_tags like '%operator%' then 'Operador'
         ELSE 'OK' 
     END as CUSTOMER,
-
-    (CASE WHEN  (d.sit_site_id_cus='MLA') THEN
-            CASE WHEN R.REG_CUST_DOC_NUMBER IS NOT NULL and R.REG_CUST_DOC_TYPE IN ('CUIL','CUIT') and left(R.REG_CUST_DOC_NUMBER,1)='3' THEN 'Company'
-                WHEN R1.REG_DATA_TYPE='company' then 'Company' 
-                WHEN R1.REG_DATA_TYPE IS NULL AND R.REG_CUST_DOC_NUMBER IS NOT NULL and R.REG_CUST_DOC_TYPE IN ('CUIL','CUIT') and left(R.REG_CUST_DOC_NUMBER,1)='3' THEN 'Company'
-                WHEN D.cus_cust_doc_type IN ('CUIL','CUIT') and (left(D.cus_cust_doc_number,1)='3'  OR left(D.cus_cust_doc_number,1)='55') THEN 'Company'
-                WHEN KYC.cus_doc_type IN ('CUIL','CUIT') and left(KYC.cus_doc_number,1)='3' THEN 'Company'
-                WHEN KYC2.CUS_KYC_ENTITY_TYPE IN('company') THEN 'Company'
-                ELSE 'Not Company' 
-            END
-        WHEN (d.sit_site_id_cus='MLB') THEN
-            CASE WHEN R1.REG_DATA_TYPE='company' then 'Company' 
-                WHEN R1.reg_cust_doc_type In ('CNPJ') THEN 'Company'
-                WHEN D.cus_cust_doc_type In ('CNPJ') THEN 'Company'
-                WHEN KYC.cus_doc_type In ('CNPJ') THEN 'Company'
-                WHEN KYC2.CUS_KYC_ENTITY_TYPE IN('company') THEN 'Company'
-                ELSE 'Not Company'
-            END
-        WHEN  (d.sit_site_id_cus='MLM') THEN
-            CASE WHEN D.cus_cust_doc_type In ('RFC') and length( D.cus_cust_doc_number) = 12  THEN 'Company'
-                WHEN KYC.cus_doc_type In ('RFC') and (length( KYC.cus_doc_number)= 12 or length( KYC.CUS_BUSINESS_DOC)= 12)   THEN 'Company'
-                WHEN KYC2.CUS_KYC_ENTITY_TYPE IN('company') THEN 'Company'
-                ELSE 'Not Company'
-            END        
-         WHEN  (d.sit_site_id_cus='MLC') THEN
-            CASE WHEN KYC2.CUS_KYC_ENTITY_TYPE IN('company') THEN 'Company'
-               WHEN R1.REG_DATA_TYPE='company' then 'Company' 
-               WHEN cast(regexp_substr(regexp_replace(D.cus_cust_doc_number,'[.$+*/&¿?! ]'),'^[0-9]+') AS bigint) between 50000000 and 9999999 THEN 'Company'
-               ELSE 'Not Company'
-            END
-        ELSE 'ERROR_SITE'
-    END) AS REG_DATA_TYPE_group, -- tipo documento
+    KYC.KYC_ENTITY_TYPE REG_DATA_TYPE_group, -- tipo documento
     tax.cus_tax_payer_type, 
     COUNT(*) cuenta
 
 FROM WHOWNER.LK_CUS_CUSTOMERS_DATA D  -- base de clientes
-LEFT JOIN WHOWNER.LK_REG_CUSTOMERS R ON d.CUS_CUST_ID=R.CUS_CUST_ID and d.sit_site_id_cus=r.sit_site_id
-LEFT JOIN WHOWNER.LK_REG_PERSON R1 ON R.REG_CUST_DOC_TYPE = R1.REG_CUST_DOC_TYPE and R.REG_CUST_DOC_NUMBER = R1.REG_CUST_DOC_NUMBER and r1.sit_site_id=r.sit_site_id
-LEFT JOIN WHOWNER.LK_KYC_CUSTOMERS KYC ON KYC.CUS_CUST_ID=D.CUS_CUST_ID
+LEFT JOIN WHOWNER.LK_KYC_VAULT_USER KYC ON KYC.CUS_CUST_ID=D.CUS_CUST_ID
 LEFT JOIN br_mx tax on tax.CUS_CUST_ID=D.CUS_CUST_ID and tax.sit_site_id=d.sit_site_id_cus
 
 WHERE COALESCE(D.CUS_TAGS, '') <> 'sink'
