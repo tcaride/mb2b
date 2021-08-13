@@ -165,7 +165,7 @@ SELECT
   cus_tax_payer_type,
   cus_tax_regime   ----Charly: NO TIENE SENTIDO XQ SON TODOS NULL en argentina
 FROM LK_TAX_CUST_WRAPPER
-WHERE cus_cust_id  IN (SELECT * FROM d01_cust_ar) AND sit_site_id IN ('MLA')
+WHERE sit_site_id IN ('MLA')
 qualify row_number () over (partition by cus_cust_id, sit_site_id ORDER BY  aud_upd_dt DESC) = 1
 ) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
 
@@ -404,7 +404,7 @@ SELECT
       ELSE 'Not Considered'
   END as Canal,
   CASE WHEN Canal='QR' OR Canal='Point' THEN 'OF'
-    WHEN Canal='Selling Marketplace' OR Canal='Online Payments'
+    WHEN Canal='Selling Marketplace' OR Canal='Online Payments' THEN 'ON'
     ELSE Canal 
   END as Agg_Canal,
   b.SEGMENTO SEGMENTO_MKTPLACE,
@@ -464,7 +464,7 @@ SELECT
   END AS Tipo_Compras,
   CASE WHEN g.GMVEBILLABLE>0 THEN
     CASE WHEN RUBRO='ACC' AND g.TGMV_AUTO/g.GMVEBILLABLE >=0.40 THEN 'Resale'
-      WHEN RUBRO='APPAREL_BEAUTY' AND g.TGMV_BEAUTY/g.GMVEBILLABLE >=0.40 THEN 'Resale' 
+      WHEN RUBRO='COMP' AND g.TGMV_COMP/g.GMVEBILLABLE >=0.40 THEN 'Resale' 
       WHEN RUBRO='CE' AND g.TGMV_CE/g.GMVEBILLABLE >=0.40 THEN 'Resale' 
       ELSE 'No Resale'
     END 
