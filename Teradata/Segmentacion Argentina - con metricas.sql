@@ -86,6 +86,8 @@ SELECT
           THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) 
           ELSE 0.0 
         END )) TGMV_AUTO,
+    SUM((case when tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Beleza e Cuidado Pessoal') 
+    THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) else 0.0 end )) TGMV_BEAUTY,
     SUM((CASE WHEN tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Computación','Electrónica','Electrónica, Audio y Video','Electrodomésticos','Electrodomésticos y Aire Acond','Electrodomésticos y Aires Ac.','Celulares y Teléfonos','Celulares y Telefonía','Cámaras Digitales y Foto','Cámaras Digitales y Foto.','Cámaras y Accesorios') 
           THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK)
           ELSE 0.0 
@@ -450,7 +452,8 @@ SELECT
     ELSE NULL
   END AS LOYALTY,
   CASE WHEN h.Q_SEG = 1 or h.Q_SEG =2 THEN 1
-    WHEN h.Q_SEG = 3 or h.Q_SEG =4 or h.Q_SEG = 5 THEN 2
+    WHEN h.Q_SEG = 3 or h.Q_SEG =4  THEN 2
+    WHEN h.Q_SEG = 5 THEN 3
     ELSE NULL
   END AS ECOSISTEMA,
   CASE WHEN l.cus_cust_id_buy IS null THEN 0 ELSE 1 END AS SEGUROS,
@@ -464,7 +467,7 @@ SELECT
   END AS Tipo_Compras,
   CASE WHEN g.GMVEBILLABLE>0 THEN
     CASE WHEN RUBRO='ACC' AND g.TGMV_AUTO/g.GMVEBILLABLE >=0.40 THEN 'Resale'
-      WHEN RUBRO='COMP' AND g.TGMV_COMP/g.GMVEBILLABLE >=0.40 THEN 'Resale' 
+      WHEN RUBRO='BEAUTY' AND g.TGMV_BEAUTY/g.GMVEBILLABLE >=0.40 THEN 'Resale' 
       WHEN RUBRO='CE' AND g.TGMV_CE/g.GMVEBILLABLE >=0.40 THEN 'Resale' 
       ELSE 'No Resale'
     END 
