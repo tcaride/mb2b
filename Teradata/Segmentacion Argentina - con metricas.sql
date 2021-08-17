@@ -86,7 +86,7 @@ SELECT
           THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) 
           ELSE 0.0 
         END )) TGMV_AUTO,
-    SUM((case when tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Beleza e Cuidado Pessoal') 
+    SUM((case when tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Belleza y Cuidado Personal') 
     THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) else 0.0 end )) TGMV_BEAUTY,
     SUM((CASE WHEN tgmv_flag = 1 and cat.cat_categ_name_l1 in ('Computación','Electrónica','Electrónica, Audio y Video','Electrodomésticos','Electrodomésticos y Aire Acond','Electrodomésticos y Aires Ac.','Celulares y Teléfonos','Celulares y Telefonía','Cámaras Digitales y Foto','Cámaras Digitales y Foto.','Cámaras y Accesorios') 
           THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK)
