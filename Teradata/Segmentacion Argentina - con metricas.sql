@@ -1,4 +1,4 @@
-/* SEGMENTACION ARGENTINA TERADATA. Tiene solo las empresas */
+/* SEGMENTACION ARGENTINA TERADATA */
 
 ----------------------------- 01. Traigo ventas: Uno datos Mercado Pago y Marketplace  ------------------------------------------
 
@@ -400,7 +400,7 @@ SELECT
   a.KYC_IDENTIFICATION_NUMBER, --
   CASE WHEN b.tpv_segment_detail ='Aggregator - Other' THEN 'Online Payments' 
       WHEN b.tpv_segment_detail ='Instore' THEN 'QR'
-      WHEN b.tpv_segment_detail ='Selling ML' THEN 'Selling Marketplace'
+      WHEN b.tpv_segment_detail ='Selling Marketplace' THEN 'Selling Marketplace'
       WHEN b.tpv_segment_detail ='Point' then 'Point'
       WHEN b.tpv_segment_detail is null then 'No Vende'
       ELSE 'Not Considered'
@@ -410,7 +410,7 @@ SELECT
     ELSE Canal 
   END as Agg_Canal,
   b.SEGMENTO SEGMENTO_MKTPLACE,
-  CASE WHEN b.tpv_segment_detail ='Selling ML' THEN d.vertical 
+  CASE WHEN b.tpv_segment_detail ='Selling Marketplace' THEN d.vertical 
       ELSE c.MCC 
   END AS RUBRO,
   CASE WHEN e.cus_internal_tags LIKE '%internal_user%' OR e.cus_internal_tags LIKE '%internal_third_party%' THEN 'MELI-1P/PL'
@@ -429,6 +429,11 @@ SELECT
     WHEN h.VENTAS_USD<= 200000 THEN 'd.40.000 a 200.000'
     ELSE 'e.Mas de 200.000' 
   END AS RANGO_VTA_PURO, 
+  CASE WHEN h.VENTAS_USD IS null THEN 'No vende'
+    WHEN h.VENTAS_USD <= 3709684 THEN 'Pequeña'
+    WHEN h.VENTAS_USD <= 41633684 THEN 'Mediana'
+    ELSE 'Grande' 
+  END AS Tamaño_Ventas_ML, 
   CASE WHEN REG_DATA_TYPE_group='Company' AND Canal<>'Not Considered' THEN 'ok'
     WHEN REG_DATA_TYPE_group <>'Company' AND Canal<>'Not Considered' AND RANGO_VTA_PURO not IN ('a.No Vende','b.Menos 6.000') THEN 'ok'
     ELSE 'no ok'
@@ -509,7 +514,7 @@ LEFT JOIN BGMV_TIPO_COMPRADOR_2 o ON a.cus_cust_id=o.cus_cust_id_buy
 WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND ((a.KYC_ENTITY_TYPE = 'company' AND
  (Tipo_Compras<>'No Compras' AND RANGO_VTA_PURO<> 'a.No Vende') )
   OR (a.KYC_ENTITY_TYPE <> 'company' AND  h.VENTAS_USD >= 6000)) 
-GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29
 
 
 
