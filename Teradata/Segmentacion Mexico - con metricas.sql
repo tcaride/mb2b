@@ -435,8 +435,8 @@ SELECT
     WHEN h.VENTAS_USD <= 12500000 THEN 'Mediana'
     ELSE 'Grande' 
   END AS Tamaño_Ventas_ML, 
-  CASE WHEN REG_DATA_TYPE_group='Company' AND Canal<>'Not Considered' THEN 'ok'
-    WHEN REG_DATA_TYPE_group <>'Company' AND Canal<>'Not Considered' AND RANGO_VTA_PURO not IN ('a.No Vende','b.Menos 6.000') THEN 'ok'
+  CASE WHEN REG_DATA_TYPE_group='company' AND Canal<>'Not Considered' THEN 'ok'
+    WHEN REG_DATA_TYPE_group <>'company' AND Canal<>'Not Considered' AND RANGO_VTA_PURO not IN ('a.No Vende','b.Menos 6.000') THEN 'ok'
     ELSE 'no ok'
   END as Baseline,
   CASE WHEN i.cus_cust_id IS null THEN 'Sin Integrador'
@@ -513,9 +513,9 @@ LEFT JOIN credits m ON a.CUS_CUST_ID=m.CUS_CUST_ID
 LEFT JOIN seller_shipping n ON a.cus_cust_id=n.CUS_CUST_ID_sel
 LEFT JOIN BGMV_TIPO_COMPRADOR_2 o ON a.cus_cust_id=o.cus_cust_id_buy 
 WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND ((a.KYC_ENTITY_TYPE = 'company' AND
- (Tipo_Compras<>'No Compras' AND RANGO_VTA_PURO<> 'a.No Vende') )
+ (Tipo_Compras<>'No Compras' OR RANGO_VTA_PURO<> 'a.No Vende') )
   OR (a.KYC_ENTITY_TYPE <> 'company' AND  h.VENTAS_USD >= 6000)) 
-GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29
 
 
 
