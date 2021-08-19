@@ -491,6 +491,14 @@ SELECT
     ELSE 'TBD'
   END AS Frequencia,
   (3*coalesce(LOYALTY,0))+(4*coalesce(ECOSISTEMA,0))+(3*coalesce(am_rank,0)) engagement,
+  CASE WHEN engagement <=10 THEN 1
+    WHEN engagement <=20 THEN 2
+    ELSE 3 
+  END engagement_rank,
+  CASE WHEN Tamaño_Ventas_ML='Grande' THEN 'Grande por ventas ML'
+    WHEN b.SEGMENTO='CARTERA GESTIONADA' OR b.SEGMENTO='TO'  THEN 'Mediana por Cartera A.'
+    ELSE Tamaño_Ventas_ML
+  END Tamaño,
   h.VENTAS_USD VENTAS_USD,
   g.GMVEBILLABLE  bgmv_cpras, 
   COUNT(DISTINCT CASE WHEN g.cus_cust_id_buy is null THEN h.cus_cust_id_sel ELSE g.cus_cust_id_buy END) AS cust_total,
@@ -514,7 +522,7 @@ LEFT JOIN BGMV_TIPO_COMPRADOR_2 o ON a.cus_cust_id=o.cus_cust_id_buy
 WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND ((a.KYC_ENTITY_TYPE = 'company' AND
  (Tipo_Compras<>'No Compras' OR RANGO_VTA_PURO<> 'a.No Vende') )
   OR (a.KYC_ENTITY_TYPE <> 'company' AND  h.VENTAS_USD >= 6000)) 
-GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29, 30, 31
 
 
 
