@@ -496,7 +496,8 @@ SELECT
     ELSE 3 
   END engagement_rank,
   CASE WHEN Tamaño_Ventas_ML='Grande' THEN 'Grande por ventas ML'
-    WHEN b.SEGMENTO='CARTERA GESTIONADA' OR b.SEGMENTO='TO'  THEN 'Mediana por Cartera A.'
+    WHEN Tamaño_Ventas_ML='Pequeña' AND (b.SEGMENTO='CARTERA GESTIONADA' OR b.SEGMENTO='TO')  
+     THEN 'Mediana por Cartera A.'
     ELSE Tamaño_Ventas_ML
   END Tamaño,
   h.VENTAS_USD VENTAS_USD,

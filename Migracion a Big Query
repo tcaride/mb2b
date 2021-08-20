@@ -1,0 +1,83 @@
+BIG QUERY
+
+------------------------------------------------------------------------------------------------------------------
+FUNCIONES UTILES 
+
+	CAST o SAFE_CAST para convertir de un tipo a otro. Cuano no puede convertir devuelve un nulo.
+	FORMAT_DATE
+	COALESCE
+
+------------------------------------------------------------------------------------------------------------------
+TABLAS
+
+	BT_MP_PAY_PAYMENTS --- MERCADOPAGO
+		pay_payment_id             ---> Nro. de pago (ID del pago)
+		* sit_site_id              ---> ID del Site (ej: MLA, MLB, MLM, etc.)
+		* cus_cust_id_sel		   ---> En el caso de que sea pago de artículo, representa el Cust ID del Vendedor
+		cus_cust_id_buy		  	   ---> En el caso de un pago de artículo, representa el Cust ID del Comprador
+		* tpv_flag				   ---> Es un campo binario que puede valer 0 (cero) o 1 (uno). Indica si el pago debe ser 
+								      contabilizado (1) o no (0) como TPV o TPN.
+		* tpv_segment_id  		   ---> Segmentación de los pagos según Negocio.
+		* tpv_segment_detail	   ---> Desglose de la Segmentación de los pagos según Negocio
+		* PAY_TRANSACTION_DOL_AMT  ---> Monto de la transacción en Dolares
+		* PAY_MOVE_DATE			   ---> Es lo que se llama la "Account Date" o fecha de acreditación del pago
+		* pay_status_id			   ---> Status del pago
+		PAY_CLIENT_ID			   --->	Identificador del flujo que generó el pago en cuestión. Ejemplo: Desktop, Web, Recurring, 
+										Android, iOS, etc. 
+		PAY_COUPON_FEE_DOL_AMT
+		PAY_DISCOUNT_FEE_DOL_AMT
+		PAY_MARKETPLACE_FEE_DOL_AMT
+		PAY_COUPON_AMOUNT_DOL_AMT
+		PAY_MERCADOPAGO_FEES_DOL_AMT
+		CAT_CATEG_ID_L1 				Category ID Level 1
+		CAT_CATEG_ID_L7					Cat Categ ID Level 7
+		PAY_SHIPPING_COST_DOL_AMT		Pay shipping cost dol AMT
+
+	BT_BIDS --- MARKETPLACE 
+		cus_cust_id_sel				---> ID Seller - Vendedor
+		sit_site_id   				---> ID del Pais
+		BID_FVF_BONIF
+		BID_BASE_CURRENT_PRICE      ---> Precio en USD de la compra
+		BID_QUANTITY_OK				---> Cantidad de unidades del item adquirido.
+		photo_id					---> Usar filtro obligatorio = 'TODATE'
+		tim_day_winning_date		---> Fecha Compra (en que se efectua el pago).Formato AAAA-MM-DD.
+		ite_gmv_flag
+		mkt_marketplace_id
+		AUTO_OFFER_FLAG
+		BID_FVF_BONIF
+
+		CUS_CUST_ID_BUY
+		CAT_CATEG_ID 				---> Categoría L7 (o categoría hoja, es decir su mínima ramificación)
+
+
+
+------------------------------------------------------------------------------------------------------------------
+
+Bigquery + Pandas
+https://sites.google.com/mercadolibre.com/sync-tech/home?authuser=0
+
+------------------------------------------------------------------------------------------------------------------
+
+TABLAS USADAS EN TERADATA
+
+
+QUERY SEGMENTACION
+
+	BT_MP_PAY_PAYMENTS 			---------------------> BT_MP_PAY_PAYMENTS  Partial Done
+	BT_BIDS
+	LK_SEGMENTO_SELLERS
+	LK_ITE_ITEMS_PH
+	AG_LK_CAT_CATEGORIES_PH
+	LK_CUS_CUSTOMER_DATES
+	LK_TAX_CUST_WRAPPER
+	LK_CUS_CUSTOMER_MCC
+	lk_mp_mcc_code
+	LK_ITE_ATTRIBUTE_VALUES
+	lk_op_active_users
+	BT_MP_SALDOS_SITE
+	BT_MP_CREDITS
+	BT_INSURANCE_PURCHASES
+	BT_SHP_SHIPMENTS
+	LK_KYC_VAULT_USER
+	LK_CUS_CUSTOMERS_DATA
+	BT_LYL_POINTS_SNAPSHOT
