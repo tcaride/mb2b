@@ -63,21 +63,31 @@ TABLAS USADAS EN TERADATA
 
 QUERY SEGMENTACION
 
-	BT_MP_PAY_PAYMENTS 			---------------------> BT_MP_PAY_PAYMENTS  Partial Done
-	BT_BIDS
-	LK_SEGMENTO_SELLERS
-	LK_ITE_ITEMS_PH
-	AG_LK_CAT_CATEGORIES_PH
-	LK_CUS_CUSTOMER_DATES
-	LK_TAX_CUST_WRAPPER
-	LK_CUS_CUSTOMER_MCC
-	lk_mp_mcc_code
-	LK_ITE_ATTRIBUTE_VALUES
-	lk_op_active_users
-	BT_MP_SALDOS_SITE
-	BT_MP_CREDITS
-	BT_INSURANCE_PURCHASES
-	BT_SHP_SHIPMENTS
-	LK_KYC_VAULT_USER
-	LK_CUS_CUSTOMERS_DATA
-	BT_LYL_POINTS_SNAPSHOT
+	* BT_MP_PAY_PAYMENTS 			---------------------> BT_MP_PAY_PAYMENTS  (Partial Done) 
+		Los campos TPV_FLAG, TPV_SEGMENT_ID y TPV_SEGMENT_DETAIL en BigQuery pueden presentar inconsistencias para ciertos pagos
+	* BT_BIDS 						---------------------> BT_ORD_ORDERS  (Done) 
+		Conseguir diccionario de de paras ya que los nombres de los campos cambian.
+	* LK_SEGMENTO_SELLERS			---------------------> Pending (Ver con Fernando Croceri)
+	* LK_ITE_ITEMS_PH				---------------------> LK_ITE_ITEMS (Done)
+	* AG_LK_CAT_CATEGORIES_PH		---------------------> AG_LK_CAT_CATEGORIES_PH (Done)
+	* LK_CUS_CUSTOMER_DATES			---------------------> 
+		Aparece como Done pero no tiene a que tabla se migro y no existe en bigquery
+	* LK_TAX_CUST_WRAPPER			---------------------> (QA) Pablo Matias Fernandez, Falta basante por lo que le dijeron.
+	* LK_CUS_CUSTOMER_MCC			---------------------> LK_CUS_CUSTOMER_MCC (Done)
+	* LK_MP_MCC_CODE				---------------------> LK_MP_MCC_CODE (Done)
+	* LK_ITE_ATTRIBUTE_VALUES		---------------------> LK_ITE_ATTRIBUTE_VALUES (Partial Done) No aparece a que tabla se migro
+	* LK_OP_ACTIVE_USERS			---------------------> (Pending)
+	* BT_MP_SALDOS_SITE				---------------------> (WIP)
+	* BT_MP_CREDITS					---------------------> BT_MP_CREDITS (Done)
+	* BT_INSURANCE_PURCHASES		---------------------> BT_INSURANCE_PURCHASES (Done) No aparece a que tabla se migro
+	* BT_SHP_SHIPMENTS				---------------------> BT_SHP_SHIPMENTS (Done)
+	* LK_KYC_VAULT_USER				---------------------> LK_KYC_VAULT_USER (Done)
+	* LK_CUS_CUSTOMERS_DATA			---------------------> LK_CUS_CUSTOMERS_DATA (Done)
+	* BT_LYL_POINTS_SNAPSHOT		---------------------> BT_LYL_POINTS_SNAPSHOT (Pending)
+
+QUERY METRICAS
+
+	* CREDITS.MC_JARVIS				---------------------> Q4 (Walter Alini)
+	* BT_CX_SURVEYS_RESPONSES		---------------------> BT_CX_SURVEYS_RESPONSES (Done)
+	* BT_CX_SURVEYS_HIS_CROUPIER	---------------------> BT_CX_SURVEYS_HIS_CROUPIER (Done)
+	* BT_CM_ORDERS_CANCELLED		---------------------> Deprecated (Agustin Sajoux Va a existir otra similar en este Q)
