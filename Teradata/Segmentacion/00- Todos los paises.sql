@@ -284,7 +284,6 @@
 
 ------ DOC ------
 
-
 ----------------------------- 01. Traigo ventas: Uno datos Mercado Pago y Marketplace  ------------------------------------------
 
 /* 00: Filtro SINK  */
@@ -469,3 +468,127 @@
 	LEFT JOIN TEMP_45.kyc_customer  b
 	on  a.b2b_id=b.b2b_id 
 	) with data primary index (b2b_id,SIT_SITE_ID) ;
+
+----------------------------- 02. Agrupo volumen de compras por buyer y categoria ------------------------------------------
+
+/* 00: Traigo todas las compras en marketplace */
+
+	DROP TABLE temp_45.buy00_doc ;
+	CREATE TABLE temp_45.buy00_doc AS ( --- compras en el marketplace por empresa
+	SELECT 
+	  coalesce(KYC_COMP_IDNT_NUMBER,a.cus_cust_id_buy) b2b_id, 
+	  b.kyc_entity_type,
+	  b.KYC_COMP_IDNT_NUMBER,
+	  count(cus_cust_id_buy) over (partition by KYC_COMP_IDNT_NUMBER) count_cust,
+	  cus_cust_id_buy,
+	  a.sit_site_id,
+	  TGMVEBILLABLE,
+	  torders_buy,
+	  tsie_buy,
+	  tx_buy
+
+	FROM TEMP_45.buy00_cust a
+	LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
+	on a.sit_site_id=b.sit_site_id AND a.cus_cust_id_buy=b.cus_cust_id
+	LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
+	ON a.sit_site_id=e.sit_site_id_cus AND a.cus_cust_id_buy=e.cus_cust_id
+	WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND b.kyc_entity_type='company'
+	)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
+
+/* 01: Agrupo por b2b_id todas las compras en marketplace */
+
+	DROP TABLE TEMP_45.buy01_doc ;
+	CREATE TABLE temp_45.buy01_doc AS ( --- compras en el marketplace por empresa
+	SELECT 
+	  b2b_id,
+	  kyc_entity_type,
+	  KYC_COMP_IDNT_NUMBER,
+	  count_cust,
+	  sit_site_id,
+	  sum(TGMVEBILLABLE) TGMVEBILLABLE,
+	  sum(torders_buy) torders_buy,
+	  sum(tsie_buy) tsie_buy,
+	  sum(tx_buy) tx_buy
+
+	FROM TEMP_45.buy00_doc
+	GROUP BY 1,2,3,4,5
+
+	)WITH DATA PRIMARY INDEX (b2b_id,sit_site_id);
+
+/* 02: Agrupo por b2b_id todas las compras en marketplace */
+
+	DROP TABLE TEMP_45.buy02_doc;
+	CREATE TABLE TEMP_45.buy02_doc AS ( --- compras en el marketplace por usuario 
+	SELECT
+	  coalesce(KYC_COMP_IDNT_NUMBER,bid.cus_cust_id_buy) b2b_id, 
+	  b.kyc_entity_type,
+	  b.KYC_COMP_IDNT_NUMBER,
+	    bid.cus_cust_id_buy,  
+	    bid.sit_site_id,
+	     ((CAST(EXTRACT(MONTH FROM bid.TIM_DAY_WINNING_DATE) AS BYTEINT)-1)/3)+1
+	  || 'Q' || substring(bid.TIM_DAY_WINNING_DATE,3,2) quarter,    
+	    COUNT(distinct (case when bid.crt_purchase_id is null then bid.ord_order_id else bid.crt_purchase_id end)) as TX_BUY
+	FROM WHOWNER.BT_BIDS as bid
+	LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
+	on bid.sit_site_id=b.sit_site_id AND bid.cus_cust_id_buy=b.cus_cust_id
+	LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
+	ON bid.sit_site_id=e.sit_site_id_cus AND bid.cus_cust_id_buy=e.cus_cust_id
+	WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND b.kyc_entity_type='company'
+	AND bid.sit_site_id IN ('MLA','MLM','MLB','MLC')
+	AND bid.photo_id = 'TODATE' 
+	AND bid.tim_day_winning_date between DATE '2020-01-01' AND DATE '2020-12-31'
+	AND bid.ite_gmv_flag = 1
+	AND bid.mkt_marketplace_id = 'TM'
+	AND tgmv_flag = 1
+	group by 1,2,3,4,5,6
+
+	)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
+
+/* 03: Agrupo por b2b_id first buy */
+
+	DROP TABLE TEMP_45.buy03_doc;
+	CREATE TABLE TEMP_45.buy03_doc AS (
+	WITH temp_first_buy AS (
+	SELECT  
+	coalesce(KYC_COMP_IDNT_NUMBER,a.cus_cust_id) b2b_id, 
+	b.kyc_entity_type,
+	b.KYC_COMP_IDNT_NUMBER,
+	a.cus_cust_id,  
+	a.sit_site_id, 
+	a.cus_first_buy_no_bonif_autoof
+	FROM WHOWNER.LK_CUS_CUSTOMER_DATES a
+	LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
+	on a.sit_site_id=b.sit_site_id AND a.cus_cust_id=b.cus_cust_id
+	LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
+	ON a.sit_site_id=e.sit_site_id_cus AND a.cus_cust_id=e.cus_cust_id
+	WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND b.kyc_entity_type='company'
+	AND a.sit_site_id  IN ('MLA','MLM','MLB','MLC')
+	AND a.cus_first_buy_no_bonif_autoof is not null
+	),
+
+	temp_first_buy_b2b as (
+	SELECT
+	b2b_id, 
+	kyc_entity_type,
+	KYC_COMP_IDNT_NUMBER,
+	sit_site_id, 
+	min(cus_first_buy_no_bonif_autoof) cus_first_buy_no_bonif_autoof
+	from temp_first_buy
+	group by 1,2,3,4
+	)
+
+	SELECT
+	    tcb.b2b_id,  
+	    tcb.sit_site_id,
+	    b.cus_first_buy_no_bonif_autoof,
+	    CASE WHEN b.cus_first_buy_no_bonif_autoof <= '2020-01-01' then 'OK'
+	      WHEN b.cus_first_buy_no_bonif_autoof <= '2020-03-31' then '3Q'
+	      WHEN b.cus_first_buy_no_bonif_autoof <= '2020-06-30' then '2Q'
+	      WHEN b.cus_first_buy_no_bonif_autoof <= '2020-09-30' then '1Q'
+	    ELSE 'Menos 1Q'  end as Q_cuenta,
+	    CASE WHEN b.cus_first_buy_no_bonif_autoof IS null THEN 'Nunca Compro' ELSE 'Compro' END AS NB,
+	    COUNT(distinct quarter) cant_q_compras  
+	FROM TEMP_45.buy02_doc tcb
+	LEFT JOIN temp_first_buy_b2b b ON b.b2b_id=tcb.b2b_id AND b.sit_site_id=tcb.SIT_SITE_ID
+	group by 1,2,3,4
+	)WITH DATA PRIMARY INDEX (b2b_id,sit_site_id);

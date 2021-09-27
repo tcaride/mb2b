@@ -101,7 +101,7 @@ SELECT
     WHEN h.LYL_LEVEL_NUMBER = 5 or h.LYL_LEVEL_NUMBER =6 THEN 3
     ELSE NULL
   END AS LOYALTY, -- 21
-  CASE WHEN l.cus_cust_id_buy IS null THEN 0 ELSE 1 END AS SEGUROS, -- 22
+  CASE WHEN l.cus_cust_id IS null THEN 0 ELSE 1 END AS SEGUROS, -- 22
   CASE WHEN m.cus_cust_id IS null THEN 0 ELSE 1 END as CREDITOS, -- 23
   CASE WHEN n.cus_cust_id_sel IS null THEN 0 ELSE 1 END as SHIPPING, -- 24
   CASE WHEN b.Q_SEG + SEGUROS + CREDITOS + SHIPPING = 1 or b.Q_SEG + SEGUROS + CREDITOS + SHIPPING =2 THEN 1
@@ -150,9 +150,9 @@ LEFT JOIN TEMP_45.LK_br_mx  e ON a.cus_cust_id=e.cus_cust_id
 LEFT JOIN temp_45.buy00_cust AS f ON a.cus_cust_id=f.cus_cust_id_buy 
 LEFT JOIN TEMP_45.LK_account_money_cust_mlb g ON a.cus_cust_id=g.cus_cust_id
 LEFT JOIN BT_LYL_POINTS_SNAPSHOT h ON a.cus_cust_id=h.cus_cust_id AND h.tim_month_id = '202012'
-LEFT JOIN temp_45.lk_seguros_cust l ON a.cus_cust_id=l.CUS_CUST_ID_buy 
-LEFT JOIN temp_45.lk_credits_cust m ON a.CUS_CUST_ID=m.CUS_CUST_ID
-LEFT JOIN temp_45.lk_seller_shipping_cust n ON a.cus_cust_id=n.CUS_CUST_ID_sel
+LEFT JOIN temp_45.lk_seguros l ON a.cus_cust_id=l.CUS_CUST_ID
+LEFT JOIN temp_45.lk_credits m ON a.CUS_CUST_ID=m.CUS_CUST_ID
+LEFT JOIN temp_45.lk_seller_shipping n ON a.cus_cust_id=n.CUS_CUST_ID_sel
 LEFT JOIN temp_45.buy02_cust o ON a.cus_cust_id=o.cus_cust_id_buy 
 LEFT JOIN whowner.LK_CUS_CUSTOMERS_DATA y ON  a.cus_cust_id=y.cus_cust_id
 

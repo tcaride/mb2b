@@ -1,316 +1,10 @@
 /* SEGMENTACION ARGENTINA TERADATA */
 
 
+----------------------------- Categorizo account money ------------------------------------------
 
-
-
------------------------------ 01. Traigo ventas: Uno datos Mercado Pago y Marketplace  ------------------------------------------
-
--- Filtro SINK
-CREATE TABLE TEMP_45.sell00_doc_mla as (
-SELECT * FROM TEMP_45.sell00_cust_mla a
-LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
-ON a.sit_site_id=e.sit_site_id_cus AND a.cus_cust_id_sel=e.cus_cust_id
-WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' 
-)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
-
--- Creo b2b_id y me traigo ventas por cust id, segment detail agregando canal y subcanal
-
-CREATE TABLE TEMP_45.sell01_doc_mla as (
-  SELECT 
-  coalesce(KYC_IDENTIFICATION_NUMBER,a.cus_cust_id_sel) b2b_id, 
-  b.kyc_entity_type,
-  b.KYC_IDENTIFICATION_NUMBER,
-  cus_cust_id_sel,
-  count(cus_cust_id_sel) over (partition by KYC_IDENTIFICATION_NUMBER) count_cust,
-  a.sit_site_id,
-  CASE WHEN tpv_segment_detail ='Aggregator - Other' THEN 'ON' 
-    WHEN tpv_segment_detail ='Checkout OFF' THEN 'ON' 
-    WHEN tpv_segment_detail ='Gateway' THEN 'ON' 
-    WHEN tpv_segment_detail ='Meli Payments' THEN 'ON' 
-    WHEN tpv_segment_detail ='Selling Marketplace' THEN 'ON'
-    WHEN tpv_segment_detail ='ON' THEN 'ON'
-    WHEN tpv_segment_detail ='Garex' THEN 'Insurtech' 
-    WHEN tpv_segment_detail ='Insurtech Compensation' THEN 'Insurtech' 
-    WHEN tpv_segment_detail ='Roda OFF' THEN 'Insurtech' 
-    WHEN tpv_segment_detail ='Roda ON' THEN 'Insurtech' 
-    WHEN tpv_segment_detail ='Instore' THEN 'OF'
-    WHEN tpv_segment_detail ='Point' then 'OF'
-    WHEN tpv_segment_detail ='Payment to suppliers' THEN 'Services'
-    WHEN tpv_segment_detail ='Payroll' THEN 'Services'
-    WHEN tpv_segment_detail is null then 'No Vende'
-    ELSE 'Not Considered'
-  END as Canal,
-  CASE WHEN tpv_segment_detail ='Aggregator - Other' THEN 'OP' 
-    WHEN tpv_segment_detail ='Checkout OFF' THEN 'OP' 
-    WHEN tpv_segment_detail ='Gateway' THEN 'OP' 
-    WHEN tpv_segment_detail ='Meli Payments' THEN 'OP' 
-    WHEN tpv_segment_detail ='Selling Marketplace' THEN 'OP'
-    WHEN tpv_segment_detail ='ON' THEN 'OP'
-    WHEN tpv_segment_detail ='Garex' THEN 'Insurtech' 
-    WHEN tpv_segment_detail ='Insurtech Compensation' THEN 'Insurtech' 
-    WHEN tpv_segment_detail ='Roda OFF' THEN 'Insurtech' 
-    WHEN tpv_segment_detail ='Roda ON' THEN 'Insurtech' 
-    WHEN tpv_segment_detail ='Instore' THEN 'QR'
-    WHEN tpv_segment_detail ='Point' then 'Point'
-    WHEN tpv_segment_detail ='Payment to suppliers' THEN 'Services'
-    WHEN tpv_segment_detail ='Payroll' THEN 'Services'
-    WHEN tpv_segment_detail is null then 'No Vende'
-    ELSE 'Not Considered'
-  END as Subcanal,
-  tpv_segment_id, --- Segmento de donde vende
-  tpv_segment_detail,
-  VENTAS_USD,
-  Q
-FROM TEMP_45.sell00_doc_mla a
-LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
-on a.sit_site_id=b.sit_site_id AND a.cus_cust_id_sel=b.cus_cust_id
-WHERE kyc_entity_type = 'company'
-)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
-
--- traigo canal max
-CREATE TABLE TEMP_45.sell02_doc_mla as (
-SELECT
-  b2b_id,
-  sit_site_id,
-  Canal
-FROM TEMP_45.sell01_doc_mla
-group by 1,2,3
-qualify row_number () over (partition by b2b_id, sit_site_id order by SUM(VENTAS_USD) DESC) = 1
-)WITH data primary index (b2b_id,SIT_SITE_ID);
-
--- traigo segment detail max
-CREATE TABLE TEMP_45.sell03_doc_mla as (
-SELECT
-  b2b_id,
-  sit_site_id,
-  subcanal,
-  tpv_segment_detail
-FROM TEMP_45.sell01_doc_mla
-group by 1,2,3,4
-qualify row_number () over (partition by b2b_id, sit_site_id order by SUM(VENTAS_USD) DESC) = 1
-)WITH data primary index (b2b_id,SIT_SITE_ID);
-
--- traigo todo en una tabla
-CREATE TABLE TEMP_45.sell04_doc_mla as (
-SELECT
-  a01.b2b_id,
-  a01.count_cust,
-  a01.kyc_entity_type,
-  a01.sit_site_id,
-  a02.canal canal_max,
-  a03.tpv_segment_detail tpv_segment_detail_max,
-  sum(a01.VENTAS_USD) ventas_usd,
-  sum(a01.Q) cant_ventas,
-  count(distinct a01.tpv_segment_detail ) q_seg
-FROM TEMP_45.sell01_doc_mla a01
-left join TEMP_45.sell02_doc_mla a02
-on a01.b2b_id=a02.b2b_id
-left join TEMP_45.sell03_doc_mla a03
-on a01.b2b_id=a03.b2b_id
-
-group by 1,2,3,4,5,6
-)WITH data primary index (b2b_id,SIT_SITE_ID);
-
-
--- agrego segmento seller
-CREATE TABLE TEMP_45.sell05_doc_mla AS (
-
-WITH 
-temp_segmento_id AS (
-SELECT
-DISTINCT a.b2b_id, a.kyc_identification_number,  a.cus_cust_id_sel, a.count_cust, b.segmento, 
-CASE WHEN b.segmento='TO' OR b.segmento='CARTERA GESTIONADA' THEN 1
-ELSE 0 END segmento_id
-FROM  TEMP_45.sell01_doc_mla a 
-LEFT JOIN WHOWNER.LK_SEGMENTO_SELLERS  b
-ON a.sit_site_id=b.sit_site_id AND a.cus_cust_id_sel=b.cus_cust_id_sel),
-
-temp_sum_segmento_id AS (
-SELECT 
-b2b_id , count_cust, SUM(segmento_id) AS sum_segmento_id
-FROM temp_segmento_id
-GROUP BY b2b_id, count_cust
-),
-
-temp_segmento_final AS (
-SELECT
-b2b_id , count_cust, sum_segmento_id,
-CASE WHEN sum_segmento_id>0 THEN 'TO / CARTERA GESTIONADA'
-ELSE 'MID/LONG/UNKNOWN' END AS segmento_final
-FROM temp_sum_segmento_id   )
-
-
-SELECT
-  a.b2b_id,
-  a.count_cust,
-  a.kyc_entity_type,
-  a.sit_site_id,
-  b.segmento_final,
-  a.canal_max,
-  a.tpv_segment_detail_max,
-  a.ventas_usd,
-  a.cant_ventas,
-  a.q_seg
-  
-FROM TEMP_45.sell04_doc_mla a
-LEFT JOIN temp_segmento_final  b
-on  a.b2b_id=b.b2b_id 
-) with data primary index (b2b_id,SIT_SITE_ID) ;
-
-
--- agrego customer 
-CREATE TABLE TEMP_45.sell06_doc_mla as (
-
-SELECT
-  a.b2b_id,
-  a.count_cust,
-  a.kyc_entity_type,
-  a.sit_site_id,
-  a.segmento_final,
-  b.customer_final,
-  a.canal_max,
-  a.tpv_segment_detail_max,
-  a.ventas_usd,
-  a.cant_ventas,
-  a.q_seg
-  
-FROM TEMP_45.sell05_doc_mla a
-LEFT JOIN TEMP_45.kyc_customer  b
-on  a.b2b_id=b.b2b_id 
-) with data primary index (b2b_id,SIT_SITE_ID) ;
-
-
-
------------------------------ 02. Agrupo volumen de compras por buyer y categoria ------------------------------------------
-
-CREATE TABLE temp_45.buy00_doc_mla AS ( --- compras en el marketplace por empresa
-SELECT 
-  coalesce(KYC_IDENTIFICATION_NUMBER,a.cus_cust_id_buy) b2b_id, 
-  b.kyc_entity_type,
-  b.KYC_IDENTIFICATION_NUMBER,
-  count(cus_cust_id_buy) over (partition by KYC_IDENTIFICATION_NUMBER) count_cust,
-  cus_cust_id_buy,
-  a.sit_site_id,
-  tgmv_comp,
-  tgmv_auto,
-  tgmv_beauty, 
-  tgmv_ce,
-  TGMVEBILLABLE,
-  torders_buy,
-  tsie_buy,
-  tx_buy
-
-FROM TEMP_45.buy00_cust_mla a
-LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
-on a.sit_site_id=b.sit_site_id AND a.cus_cust_id_buy=b.cus_cust_id
-LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
-ON a.sit_site_id=e.sit_site_id_cus AND a.cus_cust_id_buy=e.cus_cust_id
-WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND b.kyc_entity_type='company'
-)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
-
---- Agrupo por b2b_id
-CREATE TABLE temp_45.buy01_doc_mla AS ( --- compras en el marketplace por empresa
-select 
-  b2b_id,
-  kyc_entity_type,
-  KYC_IDENTIFICATION_NUMBER,
-  count_cust,
-  sit_site_id,
-  sum(tgmv_comp) tgmv_comp,
-  sum(tgmv_auto) tgmv_auto,
-  sum(tgmv_beauty) tgmv_beauty, 
-  sum(tgmv_ce) tgmv_ce ,
-  sum(TGMVEBILLABLE) TGMVEBILLABLE,
-  sum(torders_buy) torders_buy,
-  sum(tsie_buy) tsie_buy,
-  sum(tx_buy) tx_buy
-
-FROM TEMP_45.buy00_doc_mla
-group by 1,2,3,4,5
-
-)WITH DATA PRIMARY INDEX (b2b_id,sit_site_id);
-
------------------------------ 05. Traigo los Q en los que hizo compras. -----------------------------------------
-
-
-CREATE TABLE TEMP_45.buy02_cust_mla AS ( --- compras en el marketplace por usuario 
-SELECT
-  coalesce(KYC_IDENTIFICATION_NUMBER,bid.cus_cust_id_buy) b2b_id, 
-  b.kyc_entity_type,
-  b.KYC_IDENTIFICATION_NUMBER,
-    bid.cus_cust_id_buy,  
-    bid.sit_site_id,
-     ((CAST(EXTRACT(MONTH FROM bid.TIM_DAY_WINNING_DATE) AS BYTEINT)-1)/3)+1
-  || 'Q' || substring(bid.TIM_DAY_WINNING_DATE,3,2) quarter,    
-    COUNT(distinct (case when bid.crt_purchase_id is null then bid.ord_order_id else bid.crt_purchase_id end)) as TX_BUY
-FROM WHOWNER.BT_BIDS as bid
-LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
-on bid.sit_site_id=b.sit_site_id AND bid.cus_cust_id_buy=b.cus_cust_id
-LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
-ON bid.sit_site_id=e.sit_site_id_cus AND bid.cus_cust_id_buy=e.cus_cust_id
-WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND b.kyc_entity_type='company'
-AND bid.sit_site_id IN ('MLA')
-AND bid.photo_id = 'TODATE' 
-AND bid.tim_day_winning_date between DATE '2020-01-01' AND DATE '2020-12-31'
-AND bid.ite_gmv_flag = 1
-AND bid.mkt_marketplace_id = 'TM'
-AND tgmv_flag = 1
-group by 1,2,3,4,5,6
-
-)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
-
-
------------------------------ 06. Categorizo tipo de comprador -----------------------------------------
-
-CREATE TABLE TEMP_45.buy03_cust_mla AS (
-WITH temp_first_buy AS (
-SELECT  
-coalesce(KYC_IDENTIFICATION_NUMBER,a.cus_cust_id) b2b_id, 
-b.kyc_entity_type,
-b.KYC_IDENTIFICATION_NUMBER,
-a.cus_cust_id,  
-a.sit_site_id, 
-a.cus_first_buy_no_bonif_autoof
-FROM WHOWNER.LK_CUS_CUSTOMER_DATES a
-LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
-on a.sit_site_id=b.sit_site_id AND a.cus_cust_id=b.cus_cust_id
-LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
-ON a.sit_site_id=e.sit_site_id_cus AND a.cus_cust_id=e.cus_cust_id
-WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND b.kyc_entity_type='company' AND a.sit_site_id = 'MLA' and a.cus_first_buy_no_bonif_autoof is not null
-),
-
-temp_first_buy_b2b as (
-SELECT
-b2b_id, 
-kyc_entity_type,
-KYC_IDENTIFICATION_NUMBER,
-sit_site_id, 
-min(cus_first_buy_no_bonif_autoof) cus_first_buy_no_bonif_autoof
-from temp_first_buy
-group by 1,2,3,4
-)
-
-SELECT
-    tcb.b2b_id,  
-    tcb.sit_site_id,
-    b.cus_first_buy_no_bonif_autoof,
-    CASE WHEN b.cus_first_buy_no_bonif_autoof <= '2020-01-01' then 'OK'
-      WHEN b.cus_first_buy_no_bonif_autoof <= '2020-03-31' then '3Q'
-      WHEN b.cus_first_buy_no_bonif_autoof <= '2020-06-30' then '2Q'
-      WHEN b.cus_first_buy_no_bonif_autoof <= '2020-09-30' then '1Q'
-    ELSE 'Menos 1Q'  end as Q_cuenta,
-    CASE WHEN b.cus_first_buy_no_bonif_autoof IS null THEN 'Nunca Compro' ELSE 'Compro' END AS NB,
-    COUNT(distinct quarter) cant_q_compras  
-FROM TEMP_45.buy02_cust_mla tcb
-LEFT JOIN temp_first_buy_b2b b ON b.b2b_id=tcb.b2b_id AND b.sit_site_id=tcb.SIT_SITE_ID
-group by 1,2,3,4
-)WITH DATA PRIMARY INDEX (b2b_id,sit_site_id);
-
-
------------------------------ 15. Categoriza la account money ------------------------------------------
-
-CREATE TABLE TEMP_45.account_money2_mla as (
+DROP TABLE TEMP_45.LK_account_money_doc_mla;
+CREATE TABLE TEMP_45.LK_account_money_doc_mla as (
 SELECT
   CASE WHEN v.b2b_id IS NULL THEN am.b2b_id ELSE v.b2b_id END AS b2b_id ,
   CASE WHEN v.sit_site_id IS NULL THEN am.sit_site_id ELSE v.sit_site_id  END AS sit_site_id,
@@ -349,8 +43,8 @@ Y elimino los usuarios sink de la tabla de customers, son usuarios creados para 
 */
 
 
-DROP TABLE TEMP_45.segmentacion_mla;
-CREATE  TABLE TEMP_45.segmentacion_mla  AS (
+DROP TABLE TEMP_45.segmentacion_doc_mla;
+CREATE  TABLE TEMP_45.segmentacion_doc_mla  AS (
 
 SELECT
   a.b2b_id, -- 1
@@ -444,16 +138,16 @@ SELECT
 
 
 FROM TEMP_45.kyc_customer a
-LEFT JOIN temp_45.sell06_doc_mla AS b ON a.b2b_id=b.b2b_id 
+LEFT JOIN temp_45.sell06_doc AS b ON a.b2b_id=b.b2b_id 
 
-LEFT JOIN temp_45.buy01_doc_mla AS f ON a.b2b_id=f.b2b_id 
-LEFT JOIN TEMP_45.account_money2_mla g ON a.b2b_id=g.b2b_id
+LEFT JOIN temp_45.buy01_doc AS f ON a.b2b_id=f.b2b_id 
+LEFT JOIN TEMP_45.LK_account_money_doc_mla g ON a.b2b_id=g.b2b_id
 LEFT JOIN TEMP_45.LK_LOYALTY h ON a.b2b_id=h.b2b_id 
 LEFT JOIN temp_45.lk_seguros l ON a.b2b_id=l.b2b_id 
 LEFT JOIN temp_45.lk_credits m ON a.b2b_id=m.b2b_id
 LEFT JOIN temp_45.lk_seller_shipping n ON a.b2b_id=n.b2b_id
 
-LEFT JOIN temp_45.buy03_cust_mla o ON a.b2b_id=o.b2b_id 
+LEFT JOIN temp_45.buy03_doc o ON a.b2b_id=o.b2b_id 
 
 
 WHERE a.sit_site_id = 'MLA' 
