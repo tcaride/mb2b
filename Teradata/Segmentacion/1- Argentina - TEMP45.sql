@@ -49,6 +49,7 @@ SELECT
   a.SIT_SITE_ID, -- 2
   a.KYC_COMP_IDNT_NUMBER, -- 3
   a.KYC_ENTITY_TYPE, -- 4
+  a.KYC_COMP_CORPORATE_NAME,
   b.canal_max,
   b.tpv_segment_detail_max,
   b.SEGMENTO , -- 7
@@ -130,13 +131,13 @@ SELECT
     ELSE 3 
   END engagement_rank, -- 31 
 
-  CASE WHEN Agg_Frecuencia='Non Buyer' or (Agg_Frecuencia='Buyer' AND engagement_rank=1) then 'Hacerlo comprar'
-  when engagement_rank = 1 and Agg_Frecuencia= 'Frequent Buyer' then 'Aumentar Frecuencia'
-  when Agg_Frecuencia='Buyer' and engagement_rank<> 1 then 'Aumentar Frecuencia'
-  when engagement_rank=2 and Agg_Frecuencia= 'Frequent Buyer' then 'Aumentar Frecuencia'
-  when engagement_rank=3 and Agg_Frecuencia= 'Frequent Buyer' then 'Retener'
+  CASE WHEN Agg_Frecuencia='Non Buyer' then 'Not Buyer'
+  when Agg_Frecuencia='Buyer' then 'Buyer Not Engaged'
+  when engagement_rank=1 and Agg_Frecuencia= 'Frequent Buyer' then 'Buyer Not Engaged'
+  when engagement_rank=2 and Agg_Frecuencia= 'Frequent Buyer' then 'Frequent Engaged Buyer'
+  when engagement_rank=3 and Agg_Frecuencia= 'Frequent Buyer' then 'Frequent Engaged Buyer'
   else 'No puede ser'
-  end as target, 
+  end as buyer_segment, 
   b.VENTAS_USD VENTAS_USD,
   f.TGMVEBILLABLE  bgmv_cpras
 
