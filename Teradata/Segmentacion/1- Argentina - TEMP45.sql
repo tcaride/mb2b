@@ -16,14 +16,16 @@ SELECT
   WHEN am.balance/((v.VENTAS_USD*95)/365) <= 20 THEN 'e.Hasta x 20 lo que vende'
   ELSE 'f.Mas de x 20 lo que vende' END as Ratio_AM_VTAS,
 
-  CASE WHEN am.balance is null or am.balance=0 THEN 'No tiene AM'
-  WHEN  am.balance<((100*95)/5) THEN 'Menos 1900 Pesos'
-  WHEN am.balance<=((500*95)/5) THEN '1900 a 9500 Pesos'
-  WHEN am.balance<=((1500*95)/5) THEN '9500 a 28500 Pesos'
-  WHEN am.balance<=((5000*95)/5) THEN '28500 a 95000 Pesos'
-  WHEN am.balance<=((15000*95)/5) THEN '95000 a 285000 Pesos'
-  WHEN am.balance<=((50000*95)/5) THEN '285000 a 950000 Pesos'
-  ELSE 'Mas de 950000 Pesos' END as ACCOUNT_MONEY
+
+ CASE WHEN am.balance is null or am.balance=0 THEN 'No tiene AM'
+  WHEN  am.balance< (20*95) THEN  'Menos 20 USD'
+  WHEN am.balance<= (100*95)  THEN '20 a 100 USD'
+  WHEN am.balance<= (300*95) THEN '100 a 300 USD'
+  WHEN am.balance<= (1000*95)  THEN '300 a 1000 USD'
+  WHEN am.balance<= (3000*95) THEN  '1000 a 3000 USD'
+  WHEN am.balance<= (1000*95) THEN '3000 a 10000 USD'
+  ELSE 'Mas de 10000 USD' END as ACCOUNT_MONEY
+
 
 FROM TEMP_45.sell07_cust AS V
 FULL OUTER JOIN TEMP_45.LK_account_money_cust am
@@ -83,8 +85,8 @@ SELECT
   END as Baseline, -- 14
   g.ACCOUNT_MONEY, -- 16
   CASE WHEN g.ACCOUNT_MONEY ='No tiene AM' THEN 0
-    WHEN g.ACCOUNT_MONEY ='Menos 1900 Pesos' or  g.ACCOUNT_MONEY = '1900 a 9500 Pesos' THEN 1
-    WHEN  g.ACCOUNT_MONEY = '9500 a 28500 Pesos' or  g.ACCOUNT_MONEY = '28500 a 95000 Pesos' THEN 2
+    WHEN g.ACCOUNT_MONEY ='Menos 20 USD' or  g.ACCOUNT_MONEY = '100 a 300 USD' THEN 1
+    WHEN  g.ACCOUNT_MONEY = '300 a 1000 USD' or  g.ACCOUNT_MONEY = '1000 a 3000 USD' THEN 2
     ELSE 3 
   END as am_rank_am, -- 17
   g.Ratio_AM_VTAS, -- 18

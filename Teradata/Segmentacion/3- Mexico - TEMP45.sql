@@ -1,4 +1,4 @@
-/* SEGMENTACION ARGENTINA TERADATA */
+/* SEGMENTACION MEXICO TERADATA */
 
 
 ----------------------------- Categorizo account money ------------------------------------------
@@ -9,21 +9,22 @@ SELECT
   CASE WHEN cus_cust_id_sel IS NULL THEN CUS_CUST_ID ELSE cus_cust_id_sel END AS cus_cust_id ,
   CASE WHEN v.sit_site_id IS NULL THEN am.sit_site_id ELSE v.sit_site_id  END AS sit_site_id,
 
-  CASE WHEN v.VENTAS_USD is null or v.VENTAS_USD=0 or ((v.VENTAS_USD*95)/365) =0 then 'a.No Vende'
-  WHEN am.balance/((v.VENTAS_USD*95)/365) <= 1 THEN 'b.Menos d lo que vende'
-  WHEN am.balance/((v.VENTAS_USD*95)/365) <= 2 THEN 'c.Menos q el doble de lo que vende'
-  WHEN am.balance/((v.VENTAS_USD*95)/365)  <= 5 THEN 'd.Hasta x 5 lo que vende'
-  WHEN am.balance/((v.VENTAS_USD*95)/365) <= 20 THEN 'e.Hasta x 20 lo que vende'
+  CASE WHEN v.VENTAS_USD is null or v.VENTAS_USD=0 or ((v.VENTAS_USD*20)/365) =0 then 'a.No Vende'
+  WHEN am.balance/((v.VENTAS_USD*20)/365) <= 1 THEN 'b.Menos d lo que vende'
+  WHEN am.balance/((v.VENTAS_USD*20)/365) <= 2 THEN 'c.Menos q el doble de lo que vende'
+  WHEN am.balance/((v.VENTAS_USD*20)/365)  <= 5 THEN 'd.Hasta x 5 lo que vende'
+  WHEN am.balance/((v.VENTAS_USD*20)/365) <= 20 THEN 'e.Hasta x 20 lo que vende'
   ELSE 'f.Mas de x 20 lo que vende' END as Ratio_AM_VTAS,
 
  CASE WHEN am.balance is null or am.balance=0 THEN 'No tiene AM'
-  WHEN  am.balance<((100*20)/5) THEN 'Menos 400 Pesos'
-  WHEN am.balance<=((500*20)/5) THEN '400 a 2000 Pesos'
-  WHEN am.balance<=((1500*20)/5) THEN '2000 a 6000 Pesos'
-  WHEN am.balance<=((5000*20)/5) THEN '6000 a 20000 Pesos'
-  WHEN am.balance<=((15000*20)/5) THEN '20000 a 60000 Pesos'
-  WHEN am.balance<=((50000*20)/5) THEN '60000 a 200000 Pesos'
-  ELSE 'Mas de 200000 Pesos' END as ACCOUNT_MONEY
+  WHEN  am.balance< (20*20) THEN  'Menos 20 USD'
+  WHEN am.balance<= (100*20)  THEN '20 a 100 USD'
+  WHEN am.balance<= (300*20) THEN '100 a 300 USD'
+  WHEN am.balance<= (1000*20)  THEN '300 a 1000 USD'
+  WHEN am.balance<= (3000*20) THEN  '1000 a 3000 USD'
+  WHEN am.balance<= (1000*20) THEN '3000 a 10000 USD'
+  ELSE 'Mas de 10000 USD' END as ACCOUNT_MONEY
+
 
 FROM TEMP_45.sell07_cust AS V
 FULL OUTER JOIN TEMP_45.LK_account_money_cust am
@@ -83,8 +84,8 @@ SELECT
   END as Baseline, -- 14
   g.ACCOUNT_MONEY, -- 16
   CASE WHEN g.ACCOUNT_MONEY ='No tiene AM' THEN 0
-    WHEN g.ACCOUNT_MONEY ='Menos 400 Pesos' or  g.ACCOUNT_MONEY = '400 a 2000 Pesos' THEN 1
-    WHEN  g.ACCOUNT_MONEY = '2000 a 6000 Pesos' or  g.ACCOUNT_MONEY = '6000 a 20000 Pesos' THEN 2
+    WHEN g.ACCOUNT_MONEY ='Menos 20 USD' or  g.ACCOUNT_MONEY = '100 a 300 USD' THEN 1
+    WHEN  g.ACCOUNT_MONEY = '300 a 1000 USD' or  g.ACCOUNT_MONEY = '1000 a 3000 USD' THEN 2
     ELSE 3 
   END as am_rank_am, -- 17
   g.Ratio_AM_VTAS, -- 18
