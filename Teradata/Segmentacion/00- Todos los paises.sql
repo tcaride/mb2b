@@ -1,4 +1,7 @@
-/* SEGMENTACION ARGENTINA TERADATA */
+/* SEGMENTACION  TERADATA */
+
+
+------ CUST ------
 
 ----------------------------- 01. Traigo ventas: Uno datos Mercado Pago y Marketplace  ------------------------------------------
 
@@ -278,3 +281,191 @@
 	group by 1,2,3,4
 
 	)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
+
+------ DOC ------
+
+
+----------------------------- 01. Traigo ventas: Uno datos Mercado Pago y Marketplace  ------------------------------------------
+
+/* 00: Filtro SINK  */
+
+	DROP TABLE TEMP_45.sell00_doc;
+	CREATE TABLE TEMP_45.sell00_doc as (
+	SELECT * FROM TEMP_45.sell00_cust a
+	LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
+	ON a.sit_site_id=e.sit_site_id_cus AND a.cus_cust_id_sel=e.cus_cust_id
+	WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' 
+	)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
+
+/* 01: Creo b2b_id y me traigo ventas por cust id, segment detail agregando canal y subcanal  */
+
+	DROP TABLE TEMP_45.sell01_doc ;
+	CREATE TABLE TEMP_45.sell01_doc as (
+	  SELECT 
+	  coalesce(KYC_COMP_IDNT_NUMBER,a.cus_cust_id_sel) b2b_id, 
+	  b.kyc_entity_type,
+	  b.KYC_COMP_IDNT_NUMBER,
+	  cus_cust_id_sel,
+	  count(cus_cust_id_sel) over (partition by KYC_COMP_IDNT_NUMBER) count_cust,
+	  a.sit_site_id,
+	  CASE WHEN tpv_segment_detail ='Aggregator - Other' THEN 'ON' 
+	    WHEN tpv_segment_detail ='Checkout OFF' THEN 'ON' 
+	    WHEN tpv_segment_detail ='Gateway' THEN 'ON' 
+	    WHEN tpv_segment_detail ='Meli Payments' THEN 'ON' 
+	    WHEN tpv_segment_detail ='Selling Marketplace' THEN 'ON'
+	    WHEN tpv_segment_detail ='ON' THEN 'ON'
+	    WHEN tpv_segment_detail ='Garex' THEN 'Insurtech' 
+	    WHEN tpv_segment_detail ='Insurtech Compensation' THEN 'Insurtech' 
+	    WHEN tpv_segment_detail ='Roda OFF' THEN 'Insurtech' 
+	    WHEN tpv_segment_detail ='Roda ON' THEN 'Insurtech' 
+	    WHEN tpv_segment_detail ='Instore' THEN 'OF'
+	    WHEN tpv_segment_detail ='Point' then 'OF'
+	    WHEN tpv_segment_detail ='Payment to suppliers' THEN 'Services'
+	    WHEN tpv_segment_detail ='Payroll' THEN 'Services'
+	    WHEN tpv_segment_detail is null then 'No Vende'
+	    ELSE 'Not Considered'
+	  END as Canal,
+	  CASE WHEN tpv_segment_detail ='Aggregator - Other' THEN 'OP' 
+	    WHEN tpv_segment_detail ='Checkout OFF' THEN 'OP' 
+	    WHEN tpv_segment_detail ='Gateway' THEN 'OP' 
+	    WHEN tpv_segment_detail ='Meli Payments' THEN 'OP' 
+	    WHEN tpv_segment_detail ='Selling Marketplace' THEN 'OP'
+	    WHEN tpv_segment_detail ='ON' THEN 'OP'
+	    WHEN tpv_segment_detail ='Garex' THEN 'Insurtech' 
+	    WHEN tpv_segment_detail ='Insurtech Compensation' THEN 'Insurtech' 
+	    WHEN tpv_segment_detail ='Roda OFF' THEN 'Insurtech' 
+	    WHEN tpv_segment_detail ='Roda ON' THEN 'Insurtech' 
+	    WHEN tpv_segment_detail ='Instore' THEN 'QR'
+	    WHEN tpv_segment_detail ='Point' then 'Point'
+	    WHEN tpv_segment_detail ='Payment to suppliers' THEN 'Services'
+	    WHEN tpv_segment_detail ='Payroll' THEN 'Services'
+	    WHEN tpv_segment_detail is null then 'No Vende'
+	    ELSE 'Not Considered'
+	  END as Subcanal,
+	  tpv_segment_id, --- Segmento de donde vende
+	  tpv_segment_detail,
+	  VENTAS_USD,
+	  Q
+	FROM TEMP_45.sell00_doc a
+	LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
+	on a.sit_site_id=b.sit_site_id AND a.cus_cust_id_sel=b.cus_cust_id
+	WHERE kyc_entity_type = 'company'
+	)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
+
+/* 02: Traigo canal max  */
+
+	DROP TABLE TEMP_45.sell02_doc;
+	CREATE TABLE TEMP_45.sell02_doc as (
+	SELECT
+	  b2b_id,
+	  sit_site_id,
+	  Canal
+	FROM TEMP_45.sell01_doc
+	group by 1,2,3
+	qualify row_number () over (partition by b2b_id, sit_site_id order by SUM(VENTAS_USD) DESC) = 1
+	)WITH data primary index (b2b_id,SIT_SITE_ID);
+
+/* 03: Traigo segment detail max  */
+
+	DROP TABLE TEMP_45.sell03_doc;
+	CREATE TABLE TEMP_45.sell03_doc as (
+	SELECT
+	  b2b_id,
+	  sit_site_id,
+	  subcanal,
+	  tpv_segment_detail
+	FROM TEMP_45.sell01_doc
+	group by 1,2,3,4
+	qualify row_number () over (partition by b2b_id, sit_site_id order by SUM(VENTAS_USD) DESC) = 1
+	)WITH data primary index (b2b_id,SIT_SITE_ID);
+
+/* 04: Unifico  */
+
+	DROP TABLE TEMP_45.sell04_doc;
+	CREATE TABLE TEMP_45.sell04_doc as (
+	SELECT
+	  a01.b2b_id,
+	  a01.count_cust,
+	  a01.kyc_entity_type,
+	  a01.sit_site_id,
+	  a02.canal canal_max,
+	  a03.tpv_segment_detail tpv_segment_detail_max,
+	  sum(a01.VENTAS_USD) ventas_usd,
+	  sum(a01.Q) cant_ventas,
+	  count(distinct a01.tpv_segment_detail ) q_seg
+	FROM TEMP_45.sell01_doc a01
+	left join TEMP_45.sell02_doc a02
+	on a01.b2b_id=a02.b2b_id
+	left join TEMP_45.sell03_doc a03
+	on a01.b2b_id=a03.b2b_id
+
+	group by 1,2,3,4,5,6
+	)WITH data primary index (b2b_id,SIT_SITE_ID);
+
+/* 05: Agrego segmento seller  */
+
+	DROP TABLE TEMP_45.sell05_doc;
+	CREATE TABLE TEMP_45.sell05_doc AS (
+	WITH 
+	temp_segmento_id AS (
+	SELECT
+	DISTINCT a.b2b_id, a.KYC_COMP_IDNT_NUMBER,  a.cus_cust_id_sel, a.count_cust, b.segmento, 
+	CASE WHEN b.segmento='TO' OR b.segmento='CARTERA GESTIONADA' THEN 1
+	ELSE 0 END segmento_id
+	FROM  TEMP_45.sell01_doc a 
+	LEFT JOIN WHOWNER.LK_SEGMENTO_SELLERS  b
+	ON a.sit_site_id=b.sit_site_id AND a.cus_cust_id_sel=b.cus_cust_id_sel),
+
+	temp_sum_segmento_id AS (
+	SELECT 
+	b2b_id , count_cust, SUM(segmento_id) AS sum_segmento_id
+	FROM temp_segmento_id
+	GROUP BY b2b_id, count_cust
+	),
+
+	temp_segmento_final AS (
+	SELECT
+	b2b_id , count_cust, sum_segmento_id,
+	CASE WHEN sum_segmento_id>0 THEN 'TO / CARTERA GESTIONADA'
+	ELSE 'MID/LONG/UNKNOWN' END AS segmento_final
+	FROM temp_sum_segmento_id   )
+
+	SELECT
+	  a.b2b_id,
+	  a.count_cust,
+	  a.kyc_entity_type,
+	  a.sit_site_id,
+	  b.segmento_final,
+	  a.canal_max,
+	  a.tpv_segment_detail_max,
+	  a.ventas_usd,
+	  a.cant_ventas,
+	  a.q_seg
+	  
+	FROM TEMP_45.sell04_doc a
+	LEFT JOIN temp_segmento_final  b
+	on  a.b2b_id=b.b2b_id 
+	) with data primary index (b2b_id,SIT_SITE_ID) ;
+
+/* 06: Agrego customer  */
+
+	DROP TABLE TEMP_45.sell06_doc;
+	CREATE TABLE TEMP_45.sell06_doc as (
+
+	SELECT
+	  a.b2b_id,
+	  a.count_cust,
+	  a.kyc_entity_type,
+	  a.sit_site_id,
+	  a.segmento_final,
+	  b.customer_final,
+	  a.canal_max,
+	  a.tpv_segment_detail_max,
+	  a.ventas_usd,
+	  a.cant_ventas,
+	  a.q_seg
+	  
+	FROM TEMP_45.sell05_doc a
+	LEFT JOIN TEMP_45.kyc_customer  b
+	on  a.b2b_id=b.b2b_id 
+	) with data primary index (b2b_id,SIT_SITE_ID) ;
