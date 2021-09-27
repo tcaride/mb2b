@@ -395,82 +395,90 @@ Y elimino los usuarios sink de la tabla de customers, son usuarios creados para 
 
 
 SELECT
-  a.CUS_CUST_ID,
-  a.SIT_SITE_ID,
-  a.KYC_IDENTIFICATION_NUMBER, --
+  a.CUS_CUST_ID, -- 1
+  a.SIT_SITE_ID, -- 2
+  a.KYC_IDENTIFICATION_NUMBER, -- 3
+  a.KYC_ENTITY_TYPE, -- 4
   CASE WHEN b.tpv_segment_detail ='Aggregator - Other' THEN 'Online Payments' 
       WHEN b.tpv_segment_detail ='Instore' THEN 'QR'
       WHEN b.tpv_segment_detail ='Selling Marketplace' THEN 'Selling Marketplace'
       WHEN b.tpv_segment_detail ='Point' then 'Point'
       WHEN b.tpv_segment_detail is null then 'No Vende'
       ELSE 'Not Considered'
-  END as Canal,
+  END as Canal, -- 5
   CASE WHEN Canal='QR' OR Canal='Point' THEN 'OF'
     WHEN Canal='Selling Marketplace' OR Canal='Online Payments' THEN 'ON'
     ELSE Canal 
-  END as Agg_Canal,
-  b.SEGMENTO SEGMENTO_MKTPLACE,
+  END as Agg_Canal, -- 6 
+  b.SEGMENTO SEGMENTO_MKTPLACE, -- 7
   CASE WHEN b.tpv_segment_detail ='Selling Marketplace' THEN d.vertical 
       ELSE c.MCC 
-  END AS RUBRO,
+  END AS RUBRO, -- 8
   CASE WHEN e.cus_internal_tags LIKE '%internal_user%' OR e.cus_internal_tags LIKE '%internal_third_party%' THEN 'MELI-1P/PL'
     WHEN e.cus_internal_tags LIKE '%cancelled_account%' THEN 'Cuenta_ELIMINADA'
     WHEN e.cus_internal_tags LIKE '%operators_root%' THEN 'Operador_Root'
     WHEN e.cus_internal_tags LIKE '%operator%' THEN 'Operador'
     ELSE 'OK' 
-  END AS CUSTOMER,
-  a.KYC_ENTITY_TYPE AS REG_DATA_TYPE_group,
-  f.cus_tax_payer_type,
-  CASE WHEN g.GMVEBILLABLE IS NULL or g.GMVEBILLABLE=0 THEN 'No Compra' ELSE 'Compra' END  as TIPO_COMPRADOR_TGMV, 
+  END AS CUSTOMER, -- 9
+  f.cus_tax_payer_type, -- 10
+  CASE WHEN g.GMVEBILLABLE IS NULL or g.GMVEBILLABLE=0 THEN 'No Compra' 
+  ELSE 'Compra' END  as TIPO_COMPRADOR_TGMV, -- 11
   CASE WHEN h.VENTAS_USD IS null THEN 'a.No Vende'
     WHEN h.VENTAS_USD= 0 THEN 'a.No Vende'
     WHEN h.VENTAS_USD <= 6000 THEN 'b.Menos 6.000'
     WHEN h.VENTAS_USD <= 40000 THEN 'c.6.000 a 40.000'
     WHEN h.VENTAS_USD<= 200000 THEN 'd.40.000 a 200.000'
     ELSE 'e.Mas de 200.000' 
-  END AS RANGO_VTA_PURO, 
-    CASE WHEN h.VENTAS_USD IS null THEN 'No Vende'
-    WHEN h.VENTAS_USD <= 230000 THEN 'Micro'
-    WHEN h.VENTAS_USD <= 4750000 THEN 'Pequeña'
-    WHEN h.VENTAS_USD <= 12500000 THEN 'Mediana'
-    ELSE 'Grande' 
-  END AS Tamaño_Ventas_ML, 
-  CASE WHEN REG_DATA_TYPE_group='company' AND Canal<>'Not Considered' THEN 'ok'
-    WHEN REG_DATA_TYPE_group <>'company' AND Canal<>'Not Considered' AND RANGO_VTA_PURO not IN ('a.No Vende','b.Menos 6.000') THEN 'ok'
+  END AS RANGO_VTA_PURO, -- 12
+  CASE WHEN TIPO_COMPRADOR_TGMV = 'No Compra'  and RANGO_VTA_PURO ='a.No Vende' THEN 'NC y NV'
+  WHEN TIPO_COMPRADOR_TGMV = 'Compra'  and RANGO_VTA_PURO ='a.No Vende' THEN 'C y NV' 
+  WHEN TIPO_COMPRADOR_TGMV = 'No Compra'  and RANGO_VTA_PURO <>'a.No Vende' THEN 'NC y V'
+  ELSE 'C y V' 
+  END AS tipo_consumidor, -- 13
+ CASE WHEN a.KYC_ENTITY_TYPE='company' AND Canal<>'Not Considered' THEN 'ok'
+    WHEN a.KYC_ENTITY_TYPE <>'company' AND Canal<>'Not Considered' AND RANGO_VTA_PURO not IN ('a.No Vende','b.Menos 6.000') THEN 'ok'
     ELSE 'no ok'
-  END as Baseline,
+  END as Baseline, -- 14
   CASE WHEN i.cus_cust_id IS null THEN 'Sin Integrador'
     WHEN i.CANT_INTEGRADOS = 1 THEN 'Integrador Unico'  
     WHEN i.CANT_INTEGRADOS <= 3 THEN '2 a 3 Integradores'
     WHEN i.CANT_INTEGRADOS <= 10 THEN '4 a 10 Integradores'
     ELSE 'Mas de 10 integradores' 
-  END AS INTEGRACION, 
-  j.ACCOUNT_MONEY,
+  END AS INTEGRACION, -- 15
+  j.ACCOUNT_MONEY, -- 16
   CASE WHEN j.ACCOUNT_MONEY ='No tiene AM' THEN 0
     WHEN j.ACCOUNT_MONEY ='Menos 400 Pesos' or  j.ACCOUNT_MONEY = '400 a 2000 Pesos' THEN 1
     WHEN  j.ACCOUNT_MONEY = '2000 a 6000 Pesos' or  j.ACCOUNT_MONEY = '6000 a 20000 Pesos' THEN 2
     ELSE 3 
-  END as am_rank,
-  j.Ratio_AM_VTAS,
+  END as am_rank_am, -- 17
+  j.Ratio_AM_VTAS, -- 18
+  CASE WHEN j.Ratio_AM_VTAS ='No tiene AM' THEN 0
+    WHEN j.Ratio_AM_VTAS ='Menos 400 Pesos' or  j.Ratio_AM_VTAS = '400 a 2000 Pesos' THEN 1
+    WHEN  j.Ratio_AM_VTAS = '2000 a 6000 Pesos' or  j.Ratio_AM_VTAS = '6000 a 20000 Pesos' THEN 2
+    ELSE 3 
+  END as am_rank_ventas, -- 19
+  CASE WHEN h.VENTAS_USD > 0 THEN am_rank_ventas
+  ELSE am_rank_am
+  END am_rank, -- 20
   CASE WHEN k.LYL_LEVEL_NUMBER = 1 or k.LYL_LEVEL_NUMBER =2 THEN 1
     WHEN k.LYL_LEVEL_NUMBER = 3 or k.LYL_LEVEL_NUMBER =4 THEN 2
     WHEN k.LYL_LEVEL_NUMBER = 5 or k.LYL_LEVEL_NUMBER =6 THEN 3
     ELSE NULL
-  END AS LOYALTY,
-  CASE WHEN h.Q_SEG = 1 or h.Q_SEG =2 THEN 1
-    WHEN h.Q_SEG = 3 or h.Q_SEG =4  THEN 2
-    WHEN h.Q_SEG = 5 THEN 3
+  END AS LOYALTY, -- 21
+  CASE WHEN l.cus_cust_id_buy IS null THEN 0 ELSE 1 END AS SEGUROS, -- 22
+  CASE WHEN m.cus_cust_id IS null THEN 0 ELSE 1 END as CREDITOS, -- 23
+  CASE WHEN n.cus_cust_id_sel IS null THEN 0 ELSE 1 END as SHIPPING, -- 24
+  CASE WHEN h.Q_SEG + SEGUROS + CREDITOS + SHIPPING = 1 or h.Q_SEG + SEGUROS + CREDITOS + SHIPPING =2 THEN 1
+    WHEN  h.Q_SEG + SEGUROS + CREDITOS + SHIPPING = 3 or h.Q_SEG + SEGUROS + CREDITOS + SHIPPING =4  THEN 2
+    WHEN h.Q_SEG + SEGUROS + CREDITOS + SHIPPING >= 5 THEN 3
     ELSE NULL
-  END AS ECOSISTEMA,
-  CASE WHEN l.cus_cust_id_buy IS null THEN 0 ELSE 1 END AS SEGUROS,
-  CASE WHEN m.cus_cust_id IS null THEN 0 ELSE 1 END as CREDITOS,
-  CASE WHEN n.cus_cust_id_sel IS null THEN 0 ELSE 1 END as shipping,
+  END AS ECOSISTEMA, -- 25
   CASE WHEN g.GMVEBILLABLE>0 THEN
     CASE WHEN g.TGMV_COMP/g.GMVEBILLABLE >=0.45 THEN 'Compras Perfil Empresa' 
         ELSE 'Compras Perfil No Empresa' 
     END 
     ELSE 'No Compras' 
-  END AS Tipo_Compras,
+  END AS Tipo_Compras, -- 26
   CASE WHEN g.GMVEBILLABLE>0 THEN
     CASE WHEN RUBRO='ACC' AND g.TGMV_AUTO/g.GMVEBILLABLE >=0.40 THEN 'Resale'
       WHEN RUBRO='BEAUTY' AND g.TGMV_BEAUTY/g.GMVEBILLABLE >=0.40 THEN 'Resale' 
@@ -478,7 +486,7 @@ SELECT
       ELSE 'No Resale'
     END 
     ELSE 'No Compras' 
-  END AS Objetivo_Compras,
+  END AS Objetivo_Compras, -- 27
   CASE WHEN g.GMVEBILLABLE IS NULL AND o.NB='Nunca Compro' THEN 'Not Buyer'
     WHEN g.GMVEBILLABLE IS NULL AND o.NB='Compro' THEN 'Recover'
     WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta in ('Menos 1Q','1Q')  AND o.cant_q_compras >=1 THEN 'Frequent_NB'
@@ -490,12 +498,30 @@ SELECT
     WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta='OK' AND o.cant_q_compras >=4 THEN 'Frequent'
     WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta='OK' AND o.cant_q_compras <4 THEN 'Non Frequent'
     ELSE 'TBD'
-  END AS Frequencia,
-  (3*coalesce(LOYALTY,0))+(4*coalesce(ECOSISTEMA,0))+(3*coalesce(am_rank,0)) engagement,
+  END AS Frequencia, -- 28
+  CASE WHEN Frequencia='TBD' then 'Non Buyer'
+  when Frequencia='Non Frequent' then 'Buyer'
+  ELSE 'Frequent Buyer'
+  end Agg_Frecuencia, -- 29
+  (3*coalesce(LOYALTY,0))+(4*coalesce(ECOSISTEMA,0))+(3*coalesce(am_rank,0)) engagement, -- 30
+  CASE WHEN engagement <=10 THEN 1
+    WHEN engagement <=20 THEN 2
+    ELSE 3 
+  END engagement_rank, -- 31 
+    CASE WHEN h.VENTAS_USD IS null THEN 'No vende'
+    WHEN h.VENTAS_USD <= 11750000 THEN 'Pequeña'
+    WHEN h.VENTAS_USD <= 30921053 THEN 'Mediana'
+    ELSE 'Grande' 
+  END AS Tamaño_ML, --32
+  CASE WHEN Tamaño_ML='Grande' THEN 'Grande por ventas ML'
+    WHEN Tamaño_ML='Pequeña' AND (b.SEGMENTO='CARTERA GESTIONADA' OR b.SEGMENTO='TO')  
+     THEN 'Mediana por Cartera A.'
+    ELSE Tamaño_ML
+  END Tamaño_ML_Aperturado,
   h.VENTAS_USD VENTAS_USD,
   g.GMVEBILLABLE  bgmv_cpras, 
-  COUNT(DISTINCT CASE WHEN g.cus_cust_id_buy is null THEN h.cus_cust_id_sel ELSE g.cus_cust_id_buy END) AS cust_total,
-  COUNT(DISTINCT g.cus_cust_id_buy) cust_buy
+  --COUNT(DISTINCT CASE WHEN g.cus_cust_id_buy is null THEN h.cus_cust_id_sel ELSE g.cus_cust_id_buy END) AS cust_total,
+  --COUNT(DISTINCT g.cus_cust_id_buy) cust_buy
 
 FROM LK_KYC_VAULT_USER a
 LEFT JOIN Seg_Sel b ON a.cus_cust_id=b.cus_cust_id_sel
@@ -514,8 +540,8 @@ LEFT JOIN seller_shipping n ON a.cus_cust_id=n.CUS_CUST_ID_sel
 LEFT JOIN BGMV_TIPO_COMPRADOR_2 o ON a.cus_cust_id=o.cus_cust_id_buy 
 WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND ((a.KYC_ENTITY_TYPE = 'company' AND
  (Tipo_Compras<>'No Compras' OR RANGO_VTA_PURO<> 'a.No Vende') )
-  OR (a.KYC_ENTITY_TYPE <> 'company' AND  h.VENTAS_USD >= 6000)) 
-GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29
+  OR (a.KYC_ENTITY_TYPE <> 'company' AND  h.VENTAS_USD >= 6000)) AND a.KYC_ENTITY_TYPE = 'company'
+-- GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29, 30, 31, 32, 33
 
 
 

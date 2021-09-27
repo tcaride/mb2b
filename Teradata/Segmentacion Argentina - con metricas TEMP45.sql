@@ -4,7 +4,7 @@
 
 /* Comment Tomas: Traigo todos los datos de Mercado Pago de ventas por seller y canal */
 
-CREATE multiset volatile TABLE TPV_SEL_1 AS (
+CREATE TABLE TEMP_45.sell00_cust_mla  AS (
 SELECT
   mp.cus_cust_id_sel cus_cust_id_sel, --- numero de usuario
   mp.sit_site_id sit_site_id, --- site
@@ -40,41 +40,160 @@ AND bid.mkt_marketplace_id = 'TM'
 AND coalesce(BID.AUTO_OFFER_FLAG, 0) <> 1
 AND coalesce(bid.BID_FVF_BONIF, 'Y') = 'N'
 GROUP BY 1,2,3,4
-) WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) on commit preserve rows;
+) WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
 
------------------------------ 02. Agrupo Volumen de ventas por seller.  ------------------------------------------
 
-CREATE multiset volatile TABLE TPV_SEL as ( --- sumo los volumenes por seller --- volumen total por seller
+
+CREATE TABLE TEMP_45.sell01_cust_mla as (
+  SELECT   
+  cus_cust_id_sel,
+  sit_site_id,
+  CASE WHEN tpv_segment_detail ='Aggregator - Other' THEN 'ON' 
+    WHEN tpv_segment_detail ='Checkout OFF' THEN 'ON' 
+    WHEN tpv_segment_detail ='Gateway' THEN 'ON' 
+    WHEN tpv_segment_detail ='Meli Payments' THEN 'ON' 
+    WHEN tpv_segment_detail ='Selling Marketplace' THEN 'ON'
+    WHEN tpv_segment_detail ='ON' THEN 'ON'
+    WHEN tpv_segment_detail ='Garex' THEN 'Insurtech' 
+    WHEN tpv_segment_detail ='Insurtech Compensation' THEN 'Insurtech' 
+    WHEN tpv_segment_detail ='Roda OFF' THEN 'Insurtech' 
+    WHEN tpv_segment_detail ='Roda ON' THEN 'Insurtech' 
+    WHEN tpv_segment_detail ='Instore' THEN 'OF'
+    WHEN tpv_segment_detail ='Point' then 'OF'
+    WHEN tpv_segment_detail ='Payment to suppliers' THEN 'Services'
+    WHEN tpv_segment_detail ='Payroll' THEN 'Services'
+    WHEN tpv_segment_detail is null then 'No Vende'
+    ELSE 'Not Considered'
+  END as Canal,
+  CASE WHEN tpv_segment_detail ='Aggregator - Other' THEN 'OP' 
+    WHEN tpv_segment_detail ='Checkout OFF' THEN 'OP' 
+    WHEN tpv_segment_detail ='Gateway' THEN 'OP' 
+    WHEN tpv_segment_detail ='Meli Payments' THEN 'OP' 
+    WHEN tpv_segment_detail ='Selling Marketplace' THEN 'OP'
+    WHEN tpv_segment_detail ='ON' THEN 'OP'
+    WHEN tpv_segment_detail ='Garex' THEN 'Insurtech' 
+    WHEN tpv_segment_detail ='Insurtech Compensation' THEN 'Insurtech' 
+    WHEN tpv_segment_detail ='Roda OFF' THEN 'Insurtech' 
+    WHEN tpv_segment_detail ='Roda ON' THEN 'Insurtech' 
+    WHEN tpv_segment_detail ='Instore' THEN 'QR'
+    WHEN tpv_segment_detail ='Point' then 'Point'
+    WHEN tpv_segment_detail ='Payment to suppliers' THEN 'Services'
+    WHEN tpv_segment_detail ='Payroll' THEN 'Services'
+    WHEN tpv_segment_detail is null then 'No Vende'
+    ELSE 'Not Considered'
+  END as Subcanal,
+  tpv_segment_id, --- Segmento de donde vende
+  tpv_segment_detail,
+  VENTAS_USD,
+  Q
+FROM TEMP_45.sell00_cust_mla
+)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
+
+-- traigo canal max
+CREATE TABLE TEMP_45.sell02_cust_mla as (
 SELECT
   cus_cust_id_sel,
   sit_site_id,
-  SUM(VENTAS_USD) VENTAS_USD,
-  SUM(Q) Q,
-  COUNT(distinct tpv_segment_id) Q_SEG
-FROM TPV_SEL_1
-GROUP BY 1,2
-) WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) on commit preserve rows;
+  Canal
+FROM TEMP_45.sell01_cust_mla
+group by 1,2,3
+qualify row_number () over (partition by cus_cust_id_sel, sit_site_id order by SUM(VENTAS_USD) DESC) = 1
+)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
 
------------------------------ 03. Query para tener el segmento de MP, tomo el mayor puede que haya seller en mas de un segmento -----------------------------------------
-
-CREATE multiset volatile TABLE SEG_SEL as ( 
+-- traigo segment detail max
+CREATE TABLE TEMP_45.sell03_cust_mla as (
 SELECT
-  SP.cus_cust_id_sel,
-  SP.sit_site_id,
-  SP.tpv_segment_id,
-  SP.tpv_segment_detail,
-  sm.SEGMENTO,
-  VENTAS_USD
-FROM TPV_SEL_1 sp
-LEFT JOIN WHOWNER.LK_SEGMENTO_SELLERS  SM
-on SP.sit_site_id=sM.sit_site_id AND SP.cus_cust_id_sel=sM.cus_cust_id_sel
-qualify row_number () over (partition by sp.cus_cust_id_sel, sp.sit_site_id order by VENTAS_USD DESC) = 1
-GROUP BY 1,2,3,4,5,6
-) with data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) on commit preserve rows;
+  cus_cust_id_sel,
+  sit_site_id,
+  tpv_segment_detail
+FROM TEMP_45.sell01_cust_mla
+group by 1,2,3
+qualify row_number () over (partition by cus_cust_id_sel, sit_site_id order by SUM(VENTAS_USD) DESC) = 1
+)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
 
------------------------------ 04. Agrupo volumen de compras por buyer y categoria ------------------------------------------
+-- traigo segment detail max
+CREATE TABLE TEMP_45.sell04_cust_mla as (
+SELECT
+  a01.cus_cust_id_sel,
+  a01.sit_site_id,
+  a02.canal canal_max,
+  a03.tpv_segment_detail tpv_segment_detail_max,
+  sum(a01.VENTAS_USD) ventas_usd,
+  sum(a01.Q) cant_ventas,
+  count(distinct a01.tpv_segment_detail ) q_seg
+FROM TEMP_45.sell01_cust_mla a01
+left join TEMP_45.sell02_cust_mla a02
+on a01.cus_cust_id_sel=a02.cus_cust_id_sel
+left join TEMP_45.sell03_cust_mla a03
+on a01.cus_cust_id_sel=a03.cus_cust_id_sel
 
-CREATE MULTISET VOLATILE TABLE BGMV_BUY AS ( --- compras en el marketplace por empresa
+group by 1,2,3,4
+)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
+
+-- agrego segmento seller
+CREATE TABLE TEMP_45.sell05_cust_mla as (
+  select
+  a.cus_cust_id_sel,
+  a.sit_site_id,
+  b.SEGMENTO,
+  a.canal_max,
+  a.tpv_segment_detail_max,
+  a.ventas_usd,
+  a.cant_ventas,
+  a.q_seg
+FROM TEMP_45.sell04_cust_mla a
+LEFT JOIN WHOWNER.LK_SEGMENTO_SELLERS  b
+on a.sit_site_id=b.sit_site_id AND a.cus_cust_id_sel=b.cus_cust_id_sel
+) with data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) ;
+
+-- agrego company not company
+CREATE TABLE TEMP_45.sell06_cust_mla as (
+  select
+  a.cus_cust_id_sel,
+  a.sit_site_id,
+  b.kyc_entity_type,
+  b.KYC_IDENTIFICATION_NUMBER,
+  a.SEGMENTO,
+  a.canal_max,
+  a.tpv_segment_detail_max,
+  a.ventas_usd,
+  a.cant_ventas,
+  a.q_seg
+FROM TEMP_45.sell05_cust_mla a
+LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
+on a.sit_site_id=b.sit_site_id AND a.cus_cust_id_sel=b.cus_cust_id
+) with data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) ;
+
+-- agrego customer y filtro sink
+CREATE TABLE TEMP_45.sell07_cust_mla as (
+  select
+  a.cus_cust_id_sel,
+  a.sit_site_id,
+  a.kyc_entity_type,
+  a.KYC_IDENTIFICATION_NUMBER,
+  a.SEGMENTO,
+    CASE WHEN e.cus_internal_tags LIKE '%internal_user%' OR e.cus_internal_tags LIKE '%internal_third_party%' THEN 'MELI-1P/PL'
+    WHEN e.cus_internal_tags LIKE '%cancelled_account%' THEN 'Cuenta_ELIMINADA'
+    WHEN e.cus_internal_tags LIKE '%operators_root%' THEN 'Operador_Root'
+    WHEN e.cus_internal_tags LIKE '%operator%' THEN 'Operador'
+    ELSE 'OK' 
+  END AS CUSTOMER,
+  a.canal_max,
+  a.tpv_segment_detail_max,
+  a.ventas_usd,
+  a.cant_ventas,
+  a.q_seg
+FROM TEMP_45.sell06_cust_mla a
+LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
+ON  a.cus_cust_id_sel=e.cus_cust_id
+WHERE COALESCE(e.CUS_TAGS, '') <> 'sink'
+) with data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) ;
+
+
+
+----------------------------- 02. Agrupo volumen de compras por buyer y categoria ------------------------------------------
+
+CREATE TABLE temp_45.buy00_cust_mla AS ( --- compras en el marketplace por empresa
 SELECT
     bid.cus_cust_id_buy,  
     bid.sit_site_id,
@@ -95,7 +214,7 @@ SELECT
     SUM((CASE WHEN tgmv_flag = 1 
           THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) 
           ELSE 0.0 
-        END))  GMVEBILLABLE, -- TGMV
+        END))  TGMVEBILLABLE, -- TGMV
     COUNT((CASE WHEN tgmv_flag = 1 then BID.BID_QUANTITY_OK else 0.0 end))  TORDERS_BUY,
     SUM((CASE WHEN tgmv_flag = 1 then BID.BID_QUANTITY_OK else 0.0 end))  TSIE_BUY, -- TSI
     COUNT(distinct (case when bid.crt_purchase_id is null then bid.ord_order_id else bid.crt_purchase_id end)) as TX_BUY
@@ -118,11 +237,11 @@ AND bid.ite_gmv_flag = 1
 AND bid.mkt_marketplace_id = 'TM'
 AND tgmv_flag = 1
 GROUP BY 1,2
-)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy) ON COMMIT PRESERVE ROWS;
+)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
 
 ----------------------------- 05. Traigo los Q en los que hizo compras. -----------------------------------------
 
-CREATE MULTISET VOLATILE TABLE BGMV_TIPO_COMPRADOR AS ( --- compras en el marketplace por usuario 
+CREATE TABLE TEMP_45.buy01_cust_mla AS ( --- compras en el marketplace por usuario 
 SELECT
     bid.cus_cust_id_buy,  
     bid.sit_site_id,
@@ -137,11 +256,11 @@ AND bid.ite_gmv_flag = 1
 AND bid.mkt_marketplace_id = 'TM'
 AND tgmv_flag = 1
 group by 1,2,3
-)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy) ON COMMIT PRESERVE ROWS;
+)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
 
 ----------------------------- 06. Categorizo tipo de comprador -----------------------------------------
 
-CREATE MULTISET VOLATILE TABLE BGMV_TIPO_COMPRADOR_2 AS (
+CREATE TABLE TEMP_45.buy02_cust_mla AS (
 SELECT
     tcb.cus_cust_id_buy,  
     tcb.sit_site_id,
@@ -152,28 +271,27 @@ SELECT
     ELSE 'Menos 1Q'  end as Q_cuenta,
     CASE WHEN cdt.cus_first_buy_no_bonif_autoof IS null THEN 'Nunca Compro' ELSE 'Compro' END AS NB,
     COUNT(distinct quarter) cant_q_compras  
-FROM BGMV_TIPO_COMPRADOR tcb
+FROM TEMP_45.buy01_cust_mla tcb
 LEFT JOIN WHOWNER.LK_CUS_CUSTOMER_DATES CDT ON CDT.CUS_CUST_ID=tcb.CUS_CUST_ID_BUY AND CDT.sit_site_id=tcb.SIT_SITE_ID
 group by 1,2,3,4
 
-)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy) ON COMMIT PRESERVE ROWS;
+)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
 
 ----------------------------- 07. Traigo el regimen fiscal del cust: Para argentina no son consistentes los datos pero mantengo para mantener las columnas ------------------------------------------
 
-CREATE multiset volatile TABLE br_mx as ( -- tipo de regimen
+CREATE TABLE TEMP_45.LK_br_mx as ( -- tipo de regimen
 SELECT
   cus_cust_id,
   sit_site_id,
   cus_tax_payer_type,
   cus_tax_regime   ----Charly: NO TIENE SENTIDO XQ SON TODOS NULL en argentina
 FROM LK_TAX_CUST_WRAPPER
-WHERE sit_site_id IN ('MLA')
 qualify row_number () over (partition by cus_cust_id, sit_site_id ORDER BY  aud_upd_dt DESC) = 1
-) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
+) with data primary index (sit_site_id,cus_cust_id);
 
 ----------------------------- 08. Traigo rubro ------------------------------------------
 
-CREATE multiset volatile TABLE lastmcc3 as ( --- rubro
+CREATE TABLE  TEMP_45.lk_lastmcc3 as ( --- rubro
 SELECT * FROM (
   SELECT
     MCC.cus_cust_id,
@@ -187,11 +305,11 @@ SELECT * FROM (
   ) DAT2
   WHERE MAX_NUM_IND = 'Y'
   qualify row_number () over (partition by  cus_cust_id, sit_site_id order by mcc_last_adding_datetime DESC) = 1
-) with data primary index (cus_cust_id) on commit preserve rows;
+) with data primary index (cus_cust_id);
 
 ----------------------------- 9. Agrupo el rubro ------------------------------------------
 
-CREATE multiset volatile TABLE lastmcc4 as (
+CREATE TABLE TEMP_45.LK_lastmcc4 as (
 SELECT
   y.cus_cust_id,
   sit_site_id,
@@ -214,21 +332,21 @@ SELECT
   ELSE 'OTROS' END AS MCC,
   x.mcc_category mcc_group
   --COUNT(*)
-FROM lastmcc3 y
+FROM TEMP_45.LK_lastmcc3 y
 LEFT JOIN lk_mp_mcc_code x
 ON cast(y.MCC_ID as varchar(4))=cast(x.mcc_code as varchar(4))
 GROUP BY 1,2,3,4,5,6
 --having count(*)>1
-) with data primary index (cus_cust_id) on commit preserve rows;
+) with data primary index (cus_cust_id);
 
 ----------------------------- 10. Traigo vertical maxima ------------------------------------------
 
-CREATE multiset volatile TABLE vert as ( -- vertical maxima
+CREATE TABLE TEMP_45.vert as ( -- vertical maxima
 SELECT
     bid.sit_site_id,
     bid.cus_cust_id_sel,
     cat.vertical,
-    sum((Case when coalesce(bid.BID_FVF_BONIF, 'Y') = 'N' then (BID.BID_base_CURRENT_PRICE * bid.BID_QUANTITY_OK) else 0.0 end))  GMVEBILLABLE
+    sum((Case when coalesce(bid.BID_FVF_BONIF, 'Y') = 'N' then (BID.BID_base_CURRENT_PRICE * bid.BID_QUANTITY_OK) else 0.0 end))  TGMVEBILLABLE
 FROM WHOWNER.BT_BIDS as bid
 LEFT JOIN WHOWNER.LK_ITE_ITEMS_PH ite
 on (bid.ITE_ITEM_ID = ite.ITE_ITEM_ID AND    
@@ -249,7 +367,7 @@ on bid.ITE_ITEM_ID = att.ITE_ITEM_ID AND
 bid.PHOTO_ID = ite.PHOTO_ID AND    
 bid.SiT_SITE_ID = att.SIT_SITE_ID
 
-WHERE bid.sit_site_id IN ('MLA')
+WHERE bid.sit_site_id IN ('MLA','MLM','MLC')
 AND bid.photo_id = 'TODATE'
 AND bid.tim_day_winning_date BETWEEN DATE '2020-01-01' AND DATE '2020-12-31'
 AND bid.ite_gmv_flag = 1
@@ -257,23 +375,23 @@ AND bid.mkt_marketplace_id = 'TM'
 AND coalesce(BID.AUTO_OFFER_FLAG, 0) <> 1
 AND coalesce(bid.BID_FVF_BONIF, 'Y') = 'N'
 group by 1,2,3
-) with data primary index (sit_site_id,cus_cust_id_sel) on commit preserve rows;
+) with data primary index (sit_site_id,cus_cust_id_sel) ;
 
 --- 11. Agrupo Vertical
 
-CREATE multiset volatile TABLE vert2 AS ( -- vertical maxima
+CREATE TABLE TEMP_45.vert2 AS ( -- vertical maxima
 SELECT
 	cus_cust_id_sel,
 	sit_site_id,
 	vertical,
-	GMVEBILLABLE
-FROM vert
+	TGMVEBILLABLE
+FROM TEMP_45.vert
 --group by 1,2,3
-qualify row_number () over (partition by cus_cust_id_sel, sit_site_id order by  GMVEBILLABLE DESC) = 1
-) with data primary index (sit_site_id,cus_cust_id_sel) on commit preserve rows;
+qualify row_number () over (partition by cus_cust_id_sel, sit_site_id order by  TGMVEBILLABLE DESC) = 1
+) with data primary index (sit_site_id,cus_cust_id_sel);
 
 --- 12. Cuento la cantidad de verticales que vende
-
+/*
 CREATE multiset volatile TABLE vert3 as ( --- cantidad de verticales de vta
 SELECT
 		cus_cust_id_sel,
@@ -286,33 +404,33 @@ GROUP BY 1,2
 
 ----------------------------- 13. Traigo cantidad de integrados por seller ------------------------------------------
 
-CREATE multiset volatile TABLE intergrados as ( --- cantidad de integraciones a partir del get
+CREATE TABLE TEMP_45.LK_intergrados as ( --- cantidad de integraciones a partir del get
 SELECT
 cus_cust_id,
 sit_site_id,
 COUNT(*) CANT_INTEGRADOS
 FROM  WHOWNER.lk_op_active_users us
 WHERE us.date_end >=  '2020-12-31' --- trae los que no finalizaron en 2020
-AND us.sit_site_id IN ('MLA')
+AND us.sit_site_id IN ('MLA','MLM','MLC')
 group by 1,2
 ) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
-
+*/
 ----------------------------- 14. Trae la plata en cuenta de mercadopago ------------------------------------------
 
-CREATE multiset volatile TABLE account_money as (
+CREATE TABLE TEMP_45.account_money as (
 SELECT
   cus_cust_id,
   sit_site_id,
   AVG (AVAILABLE_BALANCE) balance
 FROM  BT_MP_SALDOS_SITE
 WHERE TIM_DAY BETWEEN DATE '2021-03-01' AND DATE '2021-04-30'
-AND sit_site_id IN ('MLA')
+AND sit_site_id IN ('MLA','MLM','MLC')
 GROUP BY 1,2
-) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
+) with data primary index (sit_site_id,cus_cust_id) ;
 
 ----------------------------- 15. Categoriza la account money ------------------------------------------
 
-CREATE multiset volatile TABLE account_money2 as (
+CREATE TABLE TEMP_45.account_money2_mla as (
 SELECT
   CASE WHEN cus_cust_id_sel IS NULL THEN CUS_CUST_ID ELSE cus_cust_id_sel END AS cus_cust_id ,
   CASE WHEN v.sit_site_id IS NULL THEN am.sit_site_id ELSE v.sit_site_id  END AS sit_site_id,
@@ -333,40 +451,41 @@ SELECT
   WHEN am.balance<=((50000*95)/5) THEN '285000 a 950000 Pesos'
   ELSE 'Mas de 950000 Pesos' END as ACCOUNT_MONEY
 
-FROM TPV_SEL AS V
-FULL OUTER JOIN account_money am
+FROM TEMP_45.sell07_cust_mla AS V
+FULL OUTER JOIN TEMP_45.account_money am
 on am.CUS_CUST_ID=V.CUS_CUST_ID_SEL
 AND am.sit_site_id=V.sit_site_id
-) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
+where v.SiT_SITE_ID='MLA' or am.sit_site_id='MLA'
+) with data primary index (sit_site_id,cus_cust_id) ;
 
 ----------------------------- 16. Trae datos de creditos ------------------------------------------
 
-CREATE multiset volatile TABLE credits as (
+CREATE TABLE TEMP_45.LK_credits as (
 SELECT
   CUS_CUST_ID_BORROWER CUS_CUST_ID,
   SIT_SITE_ID,
   COUNT(*) total
 FROM WHOWNER.BT_MP_CREDITS
 WHERE CRD_CREDIT_FINISH_DATE_ID >= DATE '2020-01-01'
-AND sit_site_id='MLA'
+AND sit_site_id IN ('MLA','MLM','MLC')
 GROUP BY 1,2
-) with data primary index (sit_site_id,cus_cust_id) on commit preserve rows;
+) with data primary index (sit_site_id,cus_cust_id);
 
 ----------------------------- 17. Trae datos de seguros ------------------------------------------
 
-CREATE multiset volatile TABLE seguros as (
+CREATE TABLE TEMP_45.Lk_seguros as (
 SELECT
   CUS_CUST_ID_buy,
   COUNT(*) total
 FROM WHOWNER.BT_INSURANCE_PURCHASES
 WHERE INSUR_STATUS_ID = 'confirmed'
-and SIT_SITE_ID='MLA'
+and  sit_site_id IN ('MLA','MLM','MLC')
 GROUP BY 1
-) with data primary index (cus_cust_id_buy) on commit preserve rows;
+) with data primary index (cus_cust_id_buy);
 
 ----------------------------- 18. Trae datos de shipping ------------------------------------------
 
-CREATE multiset volatile TABLE seller_shipping AS (
+CREATE TABLE temp_45.lk_seller_shipping AS (
 SELECT
   bid.sit_site_id,
   bid.cus_cust_id_sel cus_cust_id_sel,
@@ -374,7 +493,7 @@ SELECT
 FROM WHOWNER.BT_BIDS AS bid
 LEFT JOIN WHOWNER.BT_SHP_SHIPMENTS AS shp
 on bid.shp_shipment_id = shp.shp_shipment_id AND shp.sit_site_id = bid.sit_site_id
-WHERE bid.sit_site_id = 'MLA'--- ('MCO', 'MLA', 'MLB', 'MLC', 'MLM', 'MLU', 'MPE')
+WHERE bid.sit_site_id IN ('MLA','MLM','MLC')--- ('MCO', 'MLA', 'MLB', 'MLC', 'MLM', 'MLU', 'MPE')
 AND bid.photo_id = 'TODATE'
 AND bid.tim_day_winning_date BETWEEN DATE '2020-10-01' AND DATE '2020-12-31' --OR bid.tim_day_winning_date between DATE '2019-01-01' and '2019-10-31')
 AND bid.ite_gmv_flag = 1
@@ -382,7 +501,7 @@ AND bid.mkt_marketplace_id = 'TM'
 AND shp.shp_picking_type_id IN ('xd_drop_off','cross_docking','fulfillment')
 AND tgmv_flag = 1
 group by 1,2
-) with data primary index (sit_site_id,cus_cust_id_SEL) on commit preserve rows;
+) with data primary index (sit_site_id,cus_cust_id_SEL) ;
 
 ----------------------------- 19. Crea la tabla final ------------------------------------------
 
@@ -392,42 +511,33 @@ https://docs.google.com/presentation/d/1ExEk8mfT-Z9J6pibfZ8WUqegUOJzDYRpObmZLZzG
 Y elimino los usuarios sink de la tabla de customers, son usuarios creados para carritos y cosas internas.
 */
 
-
+CREATE TABLE TEMP_45.segmentacion_cust_mla as (
 
 SELECT
   a.CUS_CUST_ID, -- 1
   a.SIT_SITE_ID, -- 2
   a.KYC_IDENTIFICATION_NUMBER, -- 3
   a.KYC_ENTITY_TYPE, -- 4
-  CASE WHEN b.tpv_segment_detail ='Aggregator - Other' THEN 'Online Payments' 
-      WHEN b.tpv_segment_detail ='Instore' THEN 'QR'
-      WHEN b.tpv_segment_detail ='Selling Marketplace' THEN 'Selling Marketplace'
-      WHEN b.tpv_segment_detail ='Point' then 'Point'
-      WHEN b.tpv_segment_detail is null then 'No Vende'
-      ELSE 'Not Considered'
-  END as Canal, -- 5
-  CASE WHEN Canal='QR' OR Canal='Point' THEN 'OF'
-    WHEN Canal='Selling Marketplace' OR Canal='Online Payments' THEN 'ON'
-    ELSE Canal 
-  END as Agg_Canal, -- 6 
-  b.SEGMENTO SEGMENTO_MKTPLACE, -- 7
-  CASE WHEN b.tpv_segment_detail ='Selling Marketplace' THEN d.vertical 
+  b.canal_max,
+  b.tpv_segment_detail_max,
+  b.SEGMENTO , -- 7
+  CASE WHEN y.cus_internal_tags LIKE '%internal_user%' OR y.cus_internal_tags LIKE '%internal_third_party%' THEN 'MELI-1P/PL'
+    WHEN y.cus_internal_tags LIKE '%cancelled_account%' THEN 'Cuenta_ELIMINADA'
+    WHEN y.cus_internal_tags LIKE '%operators_root%' THEN 'Operador_Root'
+    WHEN y.cus_internal_tags LIKE '%operator%' THEN 'Operador'
+    ELSE 'OK' 
+  END AS CUSTOMER,
+  CASE WHEN b.tpv_segment_detail_max ='Selling Marketplace' THEN d.vertical 
       ELSE c.MCC 
   END AS RUBRO, -- 8
-  CASE WHEN e.cus_internal_tags LIKE '%internal_user%' OR e.cus_internal_tags LIKE '%internal_third_party%' THEN 'MELI-1P/PL'
-    WHEN e.cus_internal_tags LIKE '%cancelled_account%' THEN 'Cuenta_ELIMINADA'
-    WHEN e.cus_internal_tags LIKE '%operators_root%' THEN 'Operador_Root'
-    WHEN e.cus_internal_tags LIKE '%operator%' THEN 'Operador'
-    ELSE 'OK' 
-  END AS CUSTOMER, -- 9
-  f.cus_tax_payer_type, -- 10
-  CASE WHEN g.GMVEBILLABLE IS NULL or g.GMVEBILLABLE=0 THEN 'No Compra' 
+  e.cus_tax_payer_type, -- 10
+  CASE WHEN f.TGMVEBILLABLE IS NULL or f.TGMVEBILLABLE=0 THEN 'No Compra' 
   ELSE 'Compra' END  as TIPO_COMPRADOR_TGMV, -- 11
-  CASE WHEN h.VENTAS_USD IS null THEN 'a.No Vende'
-    WHEN h.VENTAS_USD= 0 THEN 'a.No Vende'
-    WHEN h.VENTAS_USD <= 6000 THEN 'b.Menos 6.000'
-    WHEN h.VENTAS_USD <= 40000 THEN 'c.6.000 a 40.000'
-    WHEN h.VENTAS_USD<= 200000 THEN 'd.40.000 a 200.000'
+  CASE WHEN b.VENTAS_USD IS null THEN 'a.No Vende'
+    WHEN b.VENTAS_USD= 0 THEN 'a.No Vende'
+    WHEN b.VENTAS_USD <= 6000 THEN 'b.Menos 6.000'
+    WHEN b.VENTAS_USD <= 40000 THEN 'c.6.000 a 40.000'
+    WHEN b.VENTAS_USD<= 200000 THEN 'd.40.000 a 200.000'
     ELSE 'e.Mas de 200.000' 
   END AS RANGO_VTA_PURO, -- 12
   CASE WHEN TIPO_COMPRADOR_TGMV = 'No Compra'  and RANGO_VTA_PURO ='a.No Vende' THEN 'NC y NV'
@@ -435,68 +545,48 @@ SELECT
   WHEN TIPO_COMPRADOR_TGMV = 'No Compra'  and RANGO_VTA_PURO <>'a.No Vende' THEN 'NC y V'
   ELSE 'C y V' 
   END AS tipo_consumidor, -- 13
-  CASE WHEN a.KYC_ENTITY_TYPE='company' AND Canal<>'Not Considered' THEN 'ok'
-    WHEN a.KYC_ENTITY_TYPE <>'company' AND Canal<>'Not Considered' AND RANGO_VTA_PURO not IN ('a.No Vende','b.Menos 6.000') THEN 'ok'
+  CASE WHEN a.KYC_ENTITY_TYPE='company' AND b.canal_max <>'Not Considered' THEN 'ok'
+    WHEN a.KYC_ENTITY_TYPE <>'company' AND b.canal_max<>'Not Considered' AND RANGO_VTA_PURO not IN ('a.No Vende','b.Menos 6.000') THEN 'ok'
     ELSE 'no ok'
   END as Baseline, -- 14
-  CASE WHEN i.cus_cust_id IS null THEN 'Sin Integrador'
-    WHEN i.CANT_INTEGRADOS = 1 THEN 'Integrador Unico'  
-    WHEN i.CANT_INTEGRADOS <= 3 THEN '2 a 3 Integradores'
-    WHEN i.CANT_INTEGRADOS <= 10 THEN '4 a 10 Integradores'
-    ELSE 'Mas de 10 integradores' 
-  END AS INTEGRACION, -- 15
-  j.ACCOUNT_MONEY, -- 16
-  CASE WHEN j.ACCOUNT_MONEY ='No tiene AM' THEN 0
-    WHEN j.ACCOUNT_MONEY ='Menos 1900 Pesos' or  j.ACCOUNT_MONEY = '1900 a 9500 Pesos' THEN 1
-    WHEN  j.ACCOUNT_MONEY = '9500 a 28500 Pesos' or  j.ACCOUNT_MONEY = '28500 a 95000 Pesos' THEN 2
+  g.ACCOUNT_MONEY, -- 16
+  CASE WHEN g.ACCOUNT_MONEY ='No tiene AM' THEN 0
+    WHEN g.ACCOUNT_MONEY ='Menos 1900 Pesos' or  g.ACCOUNT_MONEY = '1900 a 9500 Pesos' THEN 1
+    WHEN  g.ACCOUNT_MONEY = '9500 a 28500 Pesos' or  g.ACCOUNT_MONEY = '28500 a 95000 Pesos' THEN 2
     ELSE 3 
   END as am_rank_am, -- 17
-  j.Ratio_AM_VTAS, -- 18
-  CASE WHEN j.Ratio_AM_VTAS ='No tiene AM' THEN 0
-    WHEN j.Ratio_AM_VTAS ='Menos 1900 Pesos' or  j.Ratio_AM_VTAS = '1900 a 9500 Pesos' THEN 1
-    WHEN  j.Ratio_AM_VTAS = '9500 a 28500 Pesos' or  j.Ratio_AM_VTAS = '28500 a 95000 Pesos' THEN 2
+  g.Ratio_AM_VTAS, -- 18
+  CASE WHEN g.Ratio_AM_VTAS ='a.No Vende' THEN 0
+    WHEN g.Ratio_AM_VTAS ='b.Menos d lo que vende'or  g.Ratio_AM_VTAS = 'c.Menos q el doble de lo que vende' THEN 1
+    WHEN  g.Ratio_AM_VTAS = 'd.Hasta x 5 lo que vende' or  g.Ratio_AM_VTAS = 'e.Hasta x 20 lo que vende' THEN 2
     ELSE 3 
   END as am_rank_ventas, -- 19
-  CASE WHEN h.VENTAS_USD > 0 THEN am_rank_ventas
+  CASE WHEN b.VENTAS_USD > 0 THEN am_rank_ventas
   ELSE am_rank_am
   END am_rank, -- 20
-  CASE WHEN k.LYL_LEVEL_NUMBER = 1 or k.LYL_LEVEL_NUMBER =2 THEN 1
-    WHEN k.LYL_LEVEL_NUMBER = 3 or k.LYL_LEVEL_NUMBER =4 THEN 2
-    WHEN k.LYL_LEVEL_NUMBER = 5 or k.LYL_LEVEL_NUMBER =6 THEN 3
+  CASE WHEN h.LYL_LEVEL_NUMBER = 1 or h.LYL_LEVEL_NUMBER =2 THEN 1
+    WHEN h.LYL_LEVEL_NUMBER = 3 or h.LYL_LEVEL_NUMBER =4 THEN 2
+    WHEN h.LYL_LEVEL_NUMBER = 5 or h.LYL_LEVEL_NUMBER =6 THEN 3
     ELSE NULL
   END AS LOYALTY, -- 21
   CASE WHEN l.cus_cust_id_buy IS null THEN 0 ELSE 1 END AS SEGUROS, -- 22
   CASE WHEN m.cus_cust_id IS null THEN 0 ELSE 1 END as CREDITOS, -- 23
   CASE WHEN n.cus_cust_id_sel IS null THEN 0 ELSE 1 END as SHIPPING, -- 24
-  CASE WHEN h.Q_SEG + SEGUROS + CREDITOS + SHIPPING = 1 or h.Q_SEG + SEGUROS + CREDITOS + SHIPPING =2 THEN 1
-    WHEN  h.Q_SEG + SEGUROS + CREDITOS + SHIPPING = 3 or h.Q_SEG + SEGUROS + CREDITOS + SHIPPING =4  THEN 2
-    WHEN h.Q_SEG + SEGUROS + CREDITOS + SHIPPING >= 5 THEN 3
+  CASE WHEN b.Q_SEG + SEGUROS + CREDITOS + SHIPPING = 1 or b.Q_SEG + SEGUROS + CREDITOS + SHIPPING =2 THEN 1
+    WHEN  b.Q_SEG + SEGUROS + CREDITOS + SHIPPING = 3 or b.Q_SEG + SEGUROS + CREDITOS + SHIPPING =4  THEN 2
+    WHEN b.Q_SEG + SEGUROS + CREDITOS + SHIPPING >= 5 THEN 3
     ELSE NULL
   END AS ECOSISTEMA, -- 25
-  CASE WHEN g.GMVEBILLABLE>0 THEN
-    CASE WHEN g.TGMV_COMP/g.GMVEBILLABLE >=0.45 THEN 'Compras Perfil Empresa' 
-        ELSE 'Compras Perfil No Empresa' 
-    END 
-    ELSE 'No Compras' 
-  END AS Tipo_Compras, -- 26
-  CASE WHEN g.GMVEBILLABLE>0 THEN
-    CASE WHEN RUBRO='ACC' AND g.TGMV_AUTO/g.GMVEBILLABLE >=0.40 THEN 'Resale'
-      WHEN RUBRO='BEAUTY' AND g.TGMV_BEAUTY/g.GMVEBILLABLE >=0.40 THEN 'Resale' 
-      WHEN RUBRO='CE' AND g.TGMV_CE/g.GMVEBILLABLE >=0.40 THEN 'Resale' 
-      ELSE 'No Resale'
-    END 
-    ELSE 'No Compras' 
-  END AS Objetivo_Compras, -- 27
-  CASE WHEN g.GMVEBILLABLE IS NULL AND o.NB='Nunca Compro' THEN 'Not Buyer'
-    WHEN g.GMVEBILLABLE IS NULL AND o.NB='Compro' THEN 'Recover'
-    WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta in ('Menos 1Q','1Q')  AND o.cant_q_compras >=1 THEN 'Frequent_NB'
-    WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta in ('Menos 1Q','1Q')  AND o.cant_q_compras <1 THEN 'Non Frequent'
-    WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta='2Q' AND o.cant_q_compras >=2 THEN 'Frequent_NB'
-    WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta='2Q' AND o.cant_q_compras <2 THEN 'Non Frequent'
-    WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta='3Q' AND o.cant_q_compras >=3 THEN 'Frequent_NB'
-    WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta='3Q' AND o.cant_q_compras <3 THEN 'Non Frequent'
-    WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta='OK' AND o.cant_q_compras >=4 THEN 'Frequent'
-    WHEN g.GMVEBILLABLE IS not NULL AND o.q_cuenta='OK' AND o.cant_q_compras <4 THEN 'Non Frequent'
+  CASE WHEN f.TGMVEBILLABLE IS NULL AND o.NB='Nunca Compro' THEN 'Not Buyer'
+    WHEN f.TGMVEBILLABLE IS NULL AND o.NB='Compro' THEN 'Recover'
+    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta in ('Menos 1Q','1Q')  AND o.cant_q_compras >=1 THEN 'Frequent_NB'
+    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta in ('Menos 1Q','1Q')  AND o.cant_q_compras <1 THEN 'Non Frequent'
+    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='2Q' AND o.cant_q_compras >=2 THEN 'Frequent_NB'
+    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='2Q' AND o.cant_q_compras <2 THEN 'Non Frequent'
+    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='3Q' AND o.cant_q_compras >=3 THEN 'Frequent_NB'
+    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='3Q' AND o.cant_q_compras <3 THEN 'Non Frequent'
+    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='OK' AND o.cant_q_compras >=4 THEN 'Frequent'
+    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='OK' AND o.cant_q_compras <4 THEN 'Non Frequent'
     ELSE 'TBD'
   END AS Frequencia, -- 28
   CASE WHEN Frequencia='TBD' then 'Non Buyer'
@@ -508,45 +598,40 @@ SELECT
     WHEN engagement <=20 THEN 2
     ELSE 3 
   END engagement_rank, -- 31 
-  CASE WHEN h.VENTAS_USD IS null THEN 'No vende'
-    WHEN h.VENTAS_USD <= 3709684 THEN 'Pequeña'
-    WHEN h.VENTAS_USD <= 41633684 THEN 'Mediana'
-    ELSE 'Grande' 
-  END AS Tamaño_ML, 
-  CASE WHEN Tamaño_ML='Grande' THEN 'Grande por ventas ML'
-    WHEN Tamaño_ML='Pequeña' AND (b.SEGMENTO='CARTERA GESTIONADA' OR b.SEGMENTO='TO')  
-     THEN 'Mediana por Cartera A.'
-    ELSE Tamaño_ML
-  END Tamaño_ML_Aperturado,
-  h.VENTAS_USD VENTAS_USD,
-  g.GMVEBILLABLE  bgmv_cpras, 
- -- COUNT(DISTINCT CASE WHEN g.cus_cust_id_buy is null THEN h.cus_cust_id_sel ELSE g.cus_cust_id_buy END) AS cust_total,
- -- COUNT(DISTINCT g.cus_cust_id_buy) cust_buy
+
+  CASE WHEN Agg_Frecuencia='Non Buyer' or (Agg_Frecuencia='Buyer' AND engagement_rank=1) then 'Hacerlo comprar'
+  when engagement_rank = 1 and Agg_Frecuencia= 'Frequent Buyer' then 'Aumentar Frecuencia'
+  when Agg_Frecuencia='Buyer' and engagement_rank<> 1 then 'Aumentar Frecuencia'
+  when engagement_rank=2 and Agg_Frecuencia= 'Frequent Buyer' then 'Aumentar Frecuencia'
+  when engagement_rank=3 and Agg_Frecuencia= 'Frequent Buyer' then 'Retener'
+  else 'No puede ser'
+  end as target, 
+  b.VENTAS_USD VENTAS_USD,
+  f.TGMVEBILLABLE  bgmv_cpras
+
 
 FROM LK_KYC_VAULT_USER a
-LEFT JOIN Seg_Sel b ON a.cus_cust_id=b.cus_cust_id_sel
-LEFT JOIN lastmcc4 c ON a.cus_cust_id = c.cus_cust_id
-LEFT JOIN vert2 d ON a.cus_cust_id=d.cus_cust_id_sel
-LEFT JOIN LK_CUS_CUSTOMERS_DATA e ON  a.cus_cust_id=e.cus_cust_id
-LEFT JOIN br_mx f ON a.cus_cust_id=f.cus_cust_id
-LEFT JOIN BGMV_BUY AS g ON a.cus_cust_id=g.cus_cust_id_buy 
-LEFT JOIN TPV_SEL AS h ON a.cus_cust_id=h.cus_cust_id_sel 
-LEFT JOIN intergrados i ON a.cus_cust_id=i.cus_cust_id
-LEFT JOIN account_money2 j ON a.cus_cust_id=j.cus_cust_id
-LEFT JOIN BT_LYL_POINTS_SNAPSHOT k ON a.cus_cust_id=k.cus_cust_id AND k.tim_month_id = '202012'
-LEFT JOIN seguros l ON a.cus_cust_id=l.CUS_CUST_ID_buy 
-LEFT JOIN credits m ON a.CUS_CUST_ID=m.CUS_CUST_ID
-LEFT JOIN seller_shipping n ON a.cus_cust_id=n.CUS_CUST_ID_sel
-LEFT JOIN BGMV_TIPO_COMPRADOR_2 o ON a.cus_cust_id=o.cus_cust_id_buy 
-WHERE COALESCE(e.CUS_TAGS, '') <> 'sink' AND ((a.KYC_ENTITY_TYPE = 'company' AND
- (Tipo_Compras<>'No Compras' OR RANGO_VTA_PURO<> 'a.No Vende') )
-  OR (a.KYC_ENTITY_TYPE <> 'company' AND  h.VENTAS_USD >= 6000)) AND a.KYC_ENTITY_TYPE = 'company'
+LEFT JOIN temp_45.sell07_cust_mla AS b ON a.cus_cust_id=b.cus_cust_id_sel 
+LEFT JOIN temp_45.vert2 d ON a.cus_cust_id=d.cus_cust_id_sel
+LEFT JOIN temp_45.lk_lastmcc4 c ON a.cus_cust_id = c.cus_cust_id
+LEFT JOIN TEMP_45.LK_br_mx  e ON a.cus_cust_id=e.cus_cust_id
+LEFT JOIN temp_45.buy00_cust_mla AS f ON a.cus_cust_id=f.cus_cust_id_buy 
+LEFT JOIN TEMP_45.account_money2_mla g ON a.cus_cust_id=g.cus_cust_id
+LEFT JOIN BT_LYL_POINTS_SNAPSHOT h ON a.cus_cust_id=h.cus_cust_id AND h.tim_month_id = '202012'
+LEFT JOIN temp_45.lk_seguros l ON a.cus_cust_id=l.CUS_CUST_ID_buy 
+LEFT JOIN temp_45.lk_credits m ON a.CUS_CUST_ID=m.CUS_CUST_ID
+LEFT JOIN temp_45.lk_seller_shipping n ON a.cus_cust_id=n.CUS_CUST_ID_sel
+LEFT JOIN temp_45.buy02_cust_mla o ON a.cus_cust_id=o.cus_cust_id_buy 
+LEFT JOIN whowner.LK_CUS_CUSTOMERS_DATA y ON  a.cus_cust_id=y.cus_cust_id
+
+WHERE COALESCE(y.CUS_TAGS, '') <> 'sink' AND a.sit_site_id = 'MLA' 
+AND ((a.KYC_ENTITY_TYPE = 'company' AND (TIPO_COMPRADOR_TGMV<>'No Compra' OR RANGO_VTA_PURO<> 'a.No Vende') )
+OR (a.KYC_ENTITY_TYPE <> 'company' AND  b.VENTAS_USD >= 6000)) AND a.KYC_ENTITY_TYPE = 'company'
 --GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29, 30, 31, 32, 33
 
 
 
-
-
+) with data primary index (sit_site_id,cus_cust_id);
 
 
 

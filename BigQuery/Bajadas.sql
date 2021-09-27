@@ -1,0 +1,14 @@
+Select sit_site_id,cus_cust_id,LYL_LEVEL_NUMBER 
+from  BT_LYL_POINTS_SNAPSHOT
+where tim_month_id = '202012'
+and sit_site_id = 'MLA'
+
+
+
+---- LK_TAX_CUST_WRAPPER
+
+CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.LK_TAX_CUST_WRAPPER AS (
+SELECT * FROM meli-bi-data.SBOX_B2B_MKTPLACE.LK_TAX_CUST_WRAPPER_BR
+UNION ALL 
+SELECT * FROM meli-bi-data.SBOX_B2B_MKTPLACE.LK_TAX_CUST_WRAPPER_MX
+);
