@@ -49,7 +49,6 @@ SELECT
   a.SIT_SITE_ID, -- 2
   a.KYC_COMP_IDNT_NUMBER, -- 3
   a.KYC_ENTITY_TYPE, -- 4
-  a.KYC_COMP_CORPORATE_NAME,
   b.canal_max,
   b.tpv_segment_detail_max,
   b.SEGMENTO , -- 7
@@ -139,8 +138,8 @@ SELECT
   else 'No puede ser'
   end as buyer_segment, 
   b.VENTAS_USD VENTAS_USD,
-  f.TGMVEBILLABLE  bgmv_cpras
-
+  f.TGMVEBILLABLE  bgmv_cpras,
+  a.KYC_COMP_CORPORATE_NAME
 
 FROM LK_KYC_VAULT_USER a
 LEFT JOIN temp_45.sell07_cust AS b ON a.cus_cust_id=b.cus_cust_id_sel 

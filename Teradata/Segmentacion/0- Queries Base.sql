@@ -71,6 +71,21 @@
     qualify row_number () over (partition by cus_cust_id, sit_site_id ORDER BY  aud_upd_dt DESC) = 1
   ) with data primary index (sit_site_id,cus_cust_id);
 
+-----------------------------  Traigo el regimen fiscal del cust ------------------------------------------
+
+  CREATE TABLE TEMP_45.LK_br_mx_doc as (
+    SELECT
+      distinct 
+      coalesce(b.KYC_COMP_IDNT_NUMBER,a.cus_cust_id) b2b_id, 
+      a.sit_site_id,
+      a.cus_tax_payer_type,
+      a.cus_tax_regime   
+    FROM LK_TAX_CUST_WRAPPER a
+    LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
+    on a.sit_site_id=b.sit_site_id AND a.cus_cust_id=b.cus_cust_id
+    qualify row_number () over (partition by KYC_COMP_IDNT_NUMBER, a.sit_site_id ORDER BY  a.aud_upd_dt DESC) = 1
+
+  ) with data primary index (sit_site_id,b2b_id);
 ----------------------------- Traigo la plata en cuenta de mercadopago por documento ------------------------------------------
 
   DROP TABLE TEMP_45.account_money;

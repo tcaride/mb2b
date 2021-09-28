@@ -25,7 +25,7 @@ SELECT
   WHEN am.balance<= (1000*95) THEN '3000 a 10000 USD'
   ELSE 'Mas de 10000 USD' END as ACCOUNT_MONEY
 
-FROM TEMP_45.sell06_doc_mla AS V
+FROM TEMP_45.sell06_doc AS V
 FULL OUTER JOIN TEMP_45.account_money am
 on am.b2b_id=V.b2b_id
 AND am.sit_site_id=V.sit_site_id
@@ -49,13 +49,14 @@ CREATE  TABLE TEMP_45.segmentacion_doc_mla  AS (
 SELECT
   a.b2b_id, -- 1
   a.SIT_SITE_ID, -- 2
-  a.KYC_IDENTIFICATION_NUMBER, -- 3
+  a.KYC_COMP_IDNT_NUMBER, -- 3
   a.KYC_ENTITY_TYPE, -- 4
-  a.kyc_comp_corporate_name,
   b.canal_max,
   b.tpv_segment_detail_max,
   b.segmento_final,
   a.customer_final,
+  br_mx.cus_tax_payer_type,
+  br_mx.cus_tax_regime, 
   CASE WHEN f.TGMVEBILLABLE IS NULL or f.TGMVEBILLABLE=0 THEN 'No Compra' 
   ELSE 'Compra' END  as TIPO_COMPRADOR_TGMV, -- 11
   CASE WHEN b.VENTAS_USD IS null THEN 'a.No Vende'
@@ -134,20 +135,21 @@ SELECT
   end as buyer_segment, 
   
   b.VENTAS_USD VENTAS_USD,
-  f.TGMVEBILLABLE  bgmv_cpras
+  f.TGMVEBILLABLE  bgmv_cpras,
 
-
+  a.kyc_comp_corporate_name
 FROM TEMP_45.kyc_customer a
-LEFT JOIN temp_45.sell06_doc AS b ON a.b2b_id=b.b2b_id 
+LEFT JOIN temp_45.sell06_doc AS b ON a.b2b_id=b.b2b_id and  a.sit_site_id = b.sit_site_id
+LEFT JOIN  TEMP_45.LK_br_mx_doc as br_mx ON  a.b2b_id=br_mx.b2b_id  and  a.sit_site_id = br_mx.sit_site_id
 
-LEFT JOIN temp_45.buy01_doc AS f ON a.b2b_id=f.b2b_id 
+LEFT JOIN temp_45.buy01_doc AS f ON a.b2b_id=f.b2b_id   and  a.sit_site_id = f.sit_site_id
 LEFT JOIN TEMP_45.LK_account_money_doc_mla g ON a.b2b_id=g.b2b_id
 LEFT JOIN TEMP_45.LK_LOYALTY h ON a.b2b_id=h.b2b_id 
 LEFT JOIN temp_45.lk_seguros l ON a.b2b_id=l.b2b_id 
 LEFT JOIN temp_45.lk_credits m ON a.b2b_id=m.b2b_id
 LEFT JOIN temp_45.lk_seller_shipping n ON a.b2b_id=n.b2b_id
 
-LEFT JOIN temp_45.buy03_doc o ON a.b2b_id=o.b2b_id 
+LEFT JOIN temp_45.buy03_doc o ON a.b2b_id=o.b2b_id  and  a.sit_site_id = o.sit_site_id
 
 
 WHERE a.sit_site_id = 'MLA' 

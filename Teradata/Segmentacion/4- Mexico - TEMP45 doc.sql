@@ -3,10 +3,10 @@
 
 ----------------------------- Categorizo account money ------------------------------------------
 
-DROP TABLE TEMP_45.LK_account_money_cust_mlm;
-CREATE TABLE TEMP_45.LK_account_money_cust_mlm as (
+DROP TABLE TEMP_45.LK_account_money_doc_mlm;
+CREATE TABLE TEMP_45.LK_account_money_doc_mlm as (
 SELECT
-  CASE WHEN cus_cust_id_sel IS NULL THEN CUS_CUST_ID ELSE cus_cust_id_sel END AS cus_cust_id ,
+  CASE WHEN v.b2b_id IS NULL THEN am.b2b_id ELSE v.b2b_id END AS b2b_id ,
   CASE WHEN v.sit_site_id IS NULL THEN am.sit_site_id ELSE v.sit_site_id  END AS sit_site_id,
 
   CASE WHEN v.VENTAS_USD is null or v.VENTAS_USD=0 or ((v.VENTAS_USD*20)/365) =0 then 'a.No Vende'
@@ -25,13 +25,14 @@ SELECT
   WHEN am.balance<= (1000*20) THEN '3000 a 10000 USD'
   ELSE 'Mas de 10000 USD' END as ACCOUNT_MONEY
 
-
-FROM TEMP_45.sell07_cust AS V
-FULL OUTER JOIN TEMP_45.LK_account_money_cust am
-on am.CUS_CUST_ID=V.CUS_CUST_ID_SEL
+FROM TEMP_45.sell06_doc AS V
+FULL OUTER JOIN TEMP_45.account_money am
+on am.b2b_id=V.b2b_id
 AND am.sit_site_id=V.sit_site_id
 where v.SiT_SITE_ID='MLM' or am.sit_site_id='MLM'
-) with data primary index (sit_site_id,cus_cust_id) ;
+
+) with data primary index (sit_site_id,b2b_id) ;
+
 
 ----------------------------- 19. Crea la tabla final ------------------------------------------
 
@@ -42,27 +43,20 @@ Y elimino los usuarios sink de la tabla de customers, son usuarios creados para 
 */
 
 
-DROP TABLE TEMP_45.segmentacion_cust_mlm;
-CREATE TABLE TEMP_45.segmentacion_cust_mlm as (
+DROP TABLE TEMP_45.segmentacion_doc_mlm;
+CREATE  TABLE TEMP_45.segmentacion_doc_mlm  AS (
 
 SELECT
-  a.CUS_CUST_ID, -- 1
+  a.b2b_id, -- 1
   a.SIT_SITE_ID, -- 2
   a.KYC_COMP_IDNT_NUMBER, -- 3
   a.KYC_ENTITY_TYPE, -- 4
   b.canal_max,
   b.tpv_segment_detail_max,
-  b.SEGMENTO , -- 7
-  CASE WHEN y.cus_internal_tags LIKE '%internal_user%' OR y.cus_internal_tags LIKE '%internal_third_party%' THEN 'MELI-1P/PL'
-    WHEN y.cus_internal_tags LIKE '%cancelled_account%' THEN 'Cuenta_ELIMINADA'
-    WHEN y.cus_internal_tags LIKE '%operators_root%' THEN 'Operador_Root'
-    WHEN y.cus_internal_tags LIKE '%operator%' THEN 'Operador'
-    ELSE 'OK' 
-  END AS CUSTOMER,
-  CASE WHEN b.tpv_segment_detail_max ='Selling Marketplace' THEN d.vertical 
-      ELSE c.MCC 
-  END AS RUBRO, -- 8
-  e.cus_tax_payer_type, -- 10
+  b.segmento_final,
+  a.customer_final,
+  br_mx.cus_tax_payer_type,
+  br_mx.cus_tax_regime, 
   CASE WHEN f.TGMVEBILLABLE IS NULL or f.TGMVEBILLABLE=0 THEN 'No Compra' 
   ELSE 'Compra' END  as TIPO_COMPRADOR_TGMV, -- 11
   CASE WHEN b.VENTAS_USD IS null THEN 'a.No Vende'
@@ -96,14 +90,15 @@ SELECT
   CASE WHEN b.VENTAS_USD > 0 THEN am_rank_ventas
   ELSE am_rank_am
   END am_rank, -- 20
+
   CASE WHEN h.LYL_LEVEL_NUMBER = 1 or h.LYL_LEVEL_NUMBER =2 THEN 1
     WHEN h.LYL_LEVEL_NUMBER = 3 or h.LYL_LEVEL_NUMBER =4 THEN 2
     WHEN h.LYL_LEVEL_NUMBER = 5 or h.LYL_LEVEL_NUMBER =6 THEN 3
     ELSE NULL
   END AS LOYALTY, -- 21
-  CASE WHEN l.cus_cust_id IS null THEN 0 ELSE 1 END AS SEGUROS, -- 22
-  CASE WHEN m.cus_cust_id IS null THEN 0 ELSE 1 END as CREDITOS, -- 23
-  CASE WHEN n.cus_cust_id_sel IS null THEN 0 ELSE 1 END as SHIPPING, -- 24
+  CASE WHEN l.b2b_id IS null THEN 0 ELSE 1 END AS SEGUROS, -- 22
+  CASE WHEN m.b2b_id IS null THEN 0 ELSE 1 END as CREDITOS, -- 23
+  CASE WHEN n.b2b_id IS null THEN 0 ELSE 1 END as SHIPPING, -- 24
   CASE WHEN b.Q_SEG + SEGUROS + CREDITOS + SHIPPING = 1 or b.Q_SEG + SEGUROS + CREDITOS + SHIPPING =2 THEN 1
     WHEN  b.Q_SEG + SEGUROS + CREDITOS + SHIPPING = 3 or b.Q_SEG + SEGUROS + CREDITOS + SHIPPING =4  THEN 2
     WHEN b.Q_SEG + SEGUROS + CREDITOS + SHIPPING >= 5 THEN 3
@@ -130,7 +125,7 @@ SELECT
     WHEN engagement <=20 THEN 2
     ELSE 3 
   END engagement_rank, -- 31 
-
+  
   CASE WHEN Agg_Frecuencia='Non Buyer' then 'Not Buyer'
   when Agg_Frecuencia='Buyer' then 'Buyer Not Engaged'
   when engagement_rank=1 and Agg_Frecuencia= 'Frequent Buyer' then 'Buyer Not Engaged'
@@ -138,37 +133,33 @@ SELECT
   when engagement_rank=3 and Agg_Frecuencia= 'Frequent Buyer' then 'Frequent Engaged Buyer'
   else 'No puede ser'
   end as buyer_segment, 
+  
   b.VENTAS_USD VENTAS_USD,
   f.TGMVEBILLABLE  bgmv_cpras,
-  a.KYC_COMP_CORPORATE_NAME
+  a.kyc_comp_corporate_name
 
-FROM LK_KYC_VAULT_USER a
-LEFT JOIN temp_45.sell07_cust AS b ON a.cus_cust_id=b.cus_cust_id_sel 
-LEFT JOIN temp_45.vert2 d ON a.cus_cust_id=d.cus_cust_id_sel
-LEFT JOIN temp_45.lk_lastmcc4 c ON a.cus_cust_id = c.cus_cust_id
-LEFT JOIN TEMP_45.LK_br_mx  e ON a.cus_cust_id=e.cus_cust_id
-LEFT JOIN temp_45.buy00_cust AS f ON a.cus_cust_id=f.cus_cust_id_buy 
-LEFT JOIN TEMP_45.LK_account_money_cust_mlm g ON a.cus_cust_id=g.cus_cust_id
-LEFT JOIN BT_LYL_POINTS_SNAPSHOT h ON a.cus_cust_id=h.cus_cust_id AND h.tim_month_id = '202012'
-LEFT JOIN temp_45.lk_seguros l ON a.cus_cust_id=l.CUS_CUST_ID
-LEFT JOIN temp_45.lk_credits m ON a.CUS_CUST_ID=m.CUS_CUST_ID
-LEFT JOIN temp_45.lk_seller_shipping n ON a.cus_cust_id=n.CUS_CUST_ID_sel
-LEFT JOIN temp_45.buy02_cust o ON a.cus_cust_id=o.cus_cust_id_buy 
-LEFT JOIN whowner.LK_CUS_CUSTOMERS_DATA y ON  a.cus_cust_id=y.cus_cust_id
+FROM TEMP_45.kyc_customer a
+LEFT JOIN temp_45.sell06_doc AS b ON a.b2b_id=b.b2b_id  and a.sit_site_id= b.sit_site_id 
+LEFT JOIN  TEMP_45.LK_br_mx_doc as br_mx ON  a.b2b_id=br_mx.b2b_id and a.sit_site_id= br_mx.sit_site_id 
 
-WHERE COALESCE(y.CUS_TAGS, '') <> 'sink' AND a.sit_site_id = 'MLM' 
+LEFT JOIN temp_45.buy01_doc AS f ON a.b2b_id=f.b2b_id and a.sit_site_id= f.sit_site_id 
+LEFT JOIN TEMP_45.LK_account_money_doc_mlm g ON a.b2b_id=g.b2b_id
+LEFT JOIN TEMP_45.LK_LOYALTY h ON a.b2b_id=h.b2b_id 
+LEFT JOIN temp_45.lk_seguros l ON a.b2b_id=l.b2b_id 
+LEFT JOIN temp_45.lk_credits m ON a.b2b_id=m.b2b_id
+LEFT JOIN temp_45.lk_seller_shipping n ON a.b2b_id=n.b2b_id
+
+LEFT JOIN temp_45.buy03_doc o ON a.b2b_id=o.b2b_id  and a.sit_site_id= o.sit_site_id 
+
+
+WHERE a.sit_site_id = 'MLM' 
 AND ((a.KYC_ENTITY_TYPE = 'company' AND (TIPO_COMPRADOR_TGMV<>'No Compra' OR RANGO_VTA_PURO<> 'a.No Vende') )
 OR (a.KYC_ENTITY_TYPE <> 'company' AND  b.VENTAS_USD >= 6000)) AND a.KYC_ENTITY_TYPE = 'company'
 --GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29, 30, 31, 32, 33
 
 
 
-) with data primary index (sit_site_id,cus_cust_id);
 
 
 
-
-
-
-
-
+)  with data primary index (sit_site_id,b2b_id);
