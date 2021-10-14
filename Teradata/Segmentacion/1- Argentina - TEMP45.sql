@@ -16,7 +16,6 @@ SELECT
   WHEN am.balance/((v.VENTAS_USD*95)/365) <= 20 THEN 'e.Hasta x 20 lo que vende'
   ELSE 'f.Mas de x 20 lo que vende' END as Ratio_AM_VTAS,
 
-
  CASE WHEN am.balance is null or am.balance=0 THEN 'No tiene AM'
   WHEN  am.balance< (20*95) THEN  'Menos 20 USD'
   WHEN am.balance<= (100*95)  THEN '20 a 100 USD'
@@ -25,7 +24,6 @@ SELECT
   WHEN am.balance<= (3000*95) THEN  '1000 a 3000 USD'
   WHEN am.balance<= (1000*95) THEN '3000 a 10000 USD'
   ELSE 'Mas de 10000 USD' END as ACCOUNT_MONEY
-
 
 FROM TEMP_45.sell07_cust AS V
 FULL OUTER JOIN TEMP_45.LK_account_money_cust am
@@ -51,19 +49,22 @@ SELECT
   a.SIT_SITE_ID, -- 2
   a.KYC_COMP_IDNT_NUMBER, -- 3
   a.KYC_ENTITY_TYPE, -- 4
-  b.canal_max,
-  b.tpv_segment_detail_max,
+  CASE WHEN CHARACTER_LENGTH(REGEXP_REPLACE(a.KYC_COMP_CORPORATE_NAME, '[^0-9]*', ''))=11 THEN 'MEI' ELSE 'NOT MEI' END AS TIPO_MEI,
+  b.canal_max, --5
+  b.subcanal, --6
+  b.tpv_segment_detail_max,--7
   b.SEGMENTO , -- 7
   CASE WHEN y.cus_internal_tags LIKE '%internal_user%' OR y.cus_internal_tags LIKE '%internal_third_party%' THEN 'MELI-1P/PL'
     WHEN y.cus_internal_tags LIKE '%cancelled_account%' THEN 'Cuenta_ELIMINADA'
     WHEN y.cus_internal_tags LIKE '%operators_root%' THEN 'Operador_Root'
     WHEN y.cus_internal_tags LIKE '%operator%' THEN 'Operador'
     ELSE 'OK' 
-  END AS CUSTOMER,
+  END AS CUSTOMER,--8
   CASE WHEN b.tpv_segment_detail_max ='Selling Marketplace' THEN d.vertical 
       ELSE c.MCC 
   END AS RUBRO, -- 8
-  e.cus_tax_payer_type, -- 10
+  e.cus_tax_payer_type, -- 9
+  e.cus_tax_regime,
   CASE WHEN f.TGMVEBILLABLE IS NULL or f.TGMVEBILLABLE=0 THEN 'No Compra' 
   ELSE 'Compra' END  as TIPO_COMPRADOR_TGMV, -- 11
   CASE WHEN b.VENTAS_USD IS null THEN 'a.No Vende'

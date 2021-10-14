@@ -33,6 +33,8 @@ AND am.sit_site_id=V.sit_site_id
 where v.SiT_SITE_ID='MLM' or am.sit_site_id='MLM'
 ) with data primary index (sit_site_id,cus_cust_id) ;
 
+
+
 ----------------------------- 19. Crea la tabla final ------------------------------------------
 
 ----------------------------- Creo la base de cust de empresas  ------------------------------------------
@@ -40,7 +42,6 @@ where v.SiT_SITE_ID='MLM' or am.sit_site_id='MLM'
 https://docs.google.com/presentation/d/1ExEk8mfT-Z9J6pibfZ8WUqegUOJzDYRpObmZLZzGVHs/edit#slide=id.g7735a7c26a_2_3
 Y elimino los usuarios sink de la tabla de customers, son usuarios creados para carritos y cosas internas.
 */
-
 
 DROP TABLE TEMP_45.segmentacion_cust_mlm;
 CREATE TABLE TEMP_45.segmentacion_cust_mlm as (
@@ -50,19 +51,22 @@ SELECT
   a.SIT_SITE_ID, -- 2
   a.KYC_COMP_IDNT_NUMBER, -- 3
   a.KYC_ENTITY_TYPE, -- 4
-  b.canal_max,
-  b.tpv_segment_detail_max,
+  CASE WHEN CHARACTER_LENGTH(REGEXP_REPLACE(a.KYC_COMP_CORPORATE_NAME, '[^0-9]*', ''))=11 THEN 'MEI' ELSE 'NOT MEI' END AS TIPO_MEI,
+  b.canal_max, --5
+  b.subcanal, --6
+  b.tpv_segment_detail_max,--7
   b.SEGMENTO , -- 7
   CASE WHEN y.cus_internal_tags LIKE '%internal_user%' OR y.cus_internal_tags LIKE '%internal_third_party%' THEN 'MELI-1P/PL'
     WHEN y.cus_internal_tags LIKE '%cancelled_account%' THEN 'Cuenta_ELIMINADA'
     WHEN y.cus_internal_tags LIKE '%operators_root%' THEN 'Operador_Root'
     WHEN y.cus_internal_tags LIKE '%operator%' THEN 'Operador'
     ELSE 'OK' 
-  END AS CUSTOMER,
+  END AS CUSTOMER,--8
   CASE WHEN b.tpv_segment_detail_max ='Selling Marketplace' THEN d.vertical 
       ELSE c.MCC 
   END AS RUBRO, -- 8
-  e.cus_tax_payer_type, -- 10
+  e.cus_tax_payer_type, -- 9
+  e.cus_tax_regime,
   CASE WHEN f.TGMVEBILLABLE IS NULL or f.TGMVEBILLABLE=0 THEN 'No Compra' 
   ELSE 'Compra' END  as TIPO_COMPRADOR_TGMV, -- 11
   CASE WHEN b.VENTAS_USD IS null THEN 'a.No Vende'
@@ -141,7 +145,7 @@ SELECT
   b.VENTAS_USD VENTAS_USD,
   f.TGMVEBILLABLE  bgmv_cpras,
   a.KYC_COMP_CORPORATE_NAME
-
+  
 FROM LK_KYC_VAULT_USER a
 LEFT JOIN temp_45.sell07_cust AS b ON a.cus_cust_id=b.cus_cust_id_sel 
 LEFT JOIN temp_45.vert2 d ON a.cus_cust_id=d.cus_cust_id_sel

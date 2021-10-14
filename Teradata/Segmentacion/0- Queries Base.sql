@@ -11,6 +11,8 @@
     a.KYC_COMP_IDNT_NUMBER,
     a.kyc_entity_type,
     a.sit_site_id,
+    CASE WHEN CHARACTER_LENGTH(REGEXP_REPLACE(a.KYC_COMP_CORPORATE_NAME, '[^0-9]*', ''))=11 THEN 'MEI' ELSE 'NOT MEI' END AS TIPO_MEI,
+    CASE WHEN TIPO_MEI='NOT MEI' THEN 1 ELSE 0 END TIPO_MEI_ID,
     a.cus_cust_id,
     e.cus_internal_tags,
     CASE WHEN e.cus_internal_tags LIKE '%internal_user%' OR e.cus_internal_tags LIKE '%internal_third_party%' THEN 1
@@ -20,6 +22,12 @@
     ON a.sit_site_id=e.sit_site_id_cus AND a.cus_cust_id=e.cus_cust_id
     WHERE a.kyc_entity_type= 'company'
   ),
+  
+  temp_mei_id AS (
+    SELECT b2b_id, sum(tipo_mei_id)sum_tipo_mei_id
+    FROM temp_base
+    GROUP BY b2b_id
+  ), 
 
   temp_sum_customer_id AS (
     SELECT
@@ -51,10 +59,13 @@
     a.sit_site_id,
     b.AUD_UPD_DT,
     Case WHEN sum_customer_id>0 THEN 'MELI'
-    ELSE '' END AS customer_final
+    ELSE '' END AS customer_final,
+    CASE WHEN sum_tipo_mei_id>0 THEN 'NOT MEI' ELSE 'MEI' END TIPO_MEI
     FROM temp_sum_customer_id  a
     LEFT JOIN temp_corporate_name b
     ON a.b2b_id=b.b2b_id
+    LEFT JOIN temp_mei_id c
+    ON a.b2b_id=c.b2b_id
     WHERE ultimo_update=1
 
   ) with data primary index (b2b_id,SIT_SITE_ID) ;

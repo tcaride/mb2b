@@ -81,7 +81,7 @@ QUERY SEGMENTACION
 	* BT_MP_CREDITS					---------------------> BT_MP_CREDITS (Done)
 	* BT_INSURANCE_PURCHASES		---------------------> BT_INSURANCE_PURCHASES (Done) No aparece a que tabla se migro
 	* BT_SHP_SHIPMENTS				---------------------> BT_SHP_SHIPMENTS (Done)
-	* LK_KYC_VAULT_USER				---------------------> LK_KYC_VAULT_USER (Done)
+	* LK_KYC_VAULT_USER				---------------------> LK_KYC_VAULT_USERS (Done)
 	* LK_CUS_CUSTOMERS_DATA			---------------------> LK_CUS_CUSTOMERS_DATA (Done)
 	* BT_LYL_POINTS_SNAPSHOT		---------------------> BT_LYL_POINTS_SNAPSHOT (Pending)
 

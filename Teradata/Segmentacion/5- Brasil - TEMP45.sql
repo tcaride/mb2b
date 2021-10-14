@@ -1,4 +1,4 @@
-/* SEGMENTACION MEXICO TERADATA */
+/* SEGMENTACION BRASIL TERADATA */
 
 
 ----------------------------- Categorizo account money ------------------------------------------
@@ -32,6 +32,7 @@ AND am.sit_site_id=V.sit_site_id
 where v.SiT_SITE_ID='MLB' or am.sit_site_id='MLB'
 ) with data primary index (sit_site_id,cus_cust_id) ;
 
+
 ----------------------------- 19. Crea la tabla final ------------------------------------------
 
 ----------------------------- Creo la base de cust de empresas  ------------------------------------------
@@ -40,28 +41,30 @@ https://docs.google.com/presentation/d/1ExEk8mfT-Z9J6pibfZ8WUqegUOJzDYRpObmZLZzG
 Y elimino los usuarios sink de la tabla de customers, son usuarios creados para carritos y cosas internas.
 */
 
-
 DROP TABLE TEMP_45.segmentacion_cust_mlb;
-CREATE TABLE TEMP_45.segmentacion_cust_mlb as (
+CREATE  TABLE TEMP_45.segmentacion_cust_mlb  AS (
 
 SELECT
   a.CUS_CUST_ID, -- 1
   a.SIT_SITE_ID, -- 2
   a.KYC_COMP_IDNT_NUMBER, -- 3
   a.KYC_ENTITY_TYPE, -- 4
-  b.canal_max,
-  b.tpv_segment_detail_max,
+  CASE WHEN CHARACTER_LENGTH(REGEXP_REPLACE(a.KYC_COMP_CORPORATE_NAME, '[^0-9]*', ''))=11 THEN 'MEI' ELSE 'NOT MEI' END AS TIPO_MEI,
+  b.canal_max, --5
+  b.subcanal, --6
+  b.tpv_segment_detail_max,--7
   b.SEGMENTO , -- 7
   CASE WHEN y.cus_internal_tags LIKE '%internal_user%' OR y.cus_internal_tags LIKE '%internal_third_party%' THEN 'MELI-1P/PL'
     WHEN y.cus_internal_tags LIKE '%cancelled_account%' THEN 'Cuenta_ELIMINADA'
     WHEN y.cus_internal_tags LIKE '%operators_root%' THEN 'Operador_Root'
     WHEN y.cus_internal_tags LIKE '%operator%' THEN 'Operador'
     ELSE 'OK' 
-  END AS CUSTOMER,
+  END AS CUSTOMER,--8
   CASE WHEN b.tpv_segment_detail_max ='Selling Marketplace' THEN d.vertical 
       ELSE c.MCC 
   END AS RUBRO, -- 8
-  e.cus_tax_payer_type, -- 10
+  e.cus_tax_payer_type, -- 9
+  e.cus_tax_regime,
   CASE WHEN f.TGMVEBILLABLE IS NULL or f.TGMVEBILLABLE=0 THEN 'No Compra' 
   ELSE 'Compra' END  as TIPO_COMPRADOR_TGMV, -- 11
   CASE WHEN b.VENTAS_USD IS null THEN 'a.No Vende'
@@ -147,10 +150,10 @@ LEFT JOIN temp_45.vert2 d ON a.cus_cust_id=d.cus_cust_id_sel
 LEFT JOIN temp_45.lk_lastmcc4 c ON a.cus_cust_id = c.cus_cust_id
 LEFT JOIN TEMP_45.LK_br_mx  e ON a.cus_cust_id=e.cus_cust_id
 LEFT JOIN temp_45.buy00_cust AS f ON a.cus_cust_id=f.cus_cust_id_buy 
-LEFT JOIN TEMP_45.LK_account_money_cust_mlb g ON a.cus_cust_id=g.cus_cust_id
+LEFT JOIN TEMP_45.LK_account_money_cust_mla g ON a.cus_cust_id=g.cus_cust_id
 LEFT JOIN BT_LYL_POINTS_SNAPSHOT h ON a.cus_cust_id=h.cus_cust_id AND h.tim_month_id = '202012'
-LEFT JOIN temp_45.lk_seguros l ON a.cus_cust_id=l.CUS_CUST_ID
-LEFT JOIN temp_45.lk_credits m ON a.CUS_CUST_ID=m.CUS_CUST_ID
+LEFT JOIN temp_45.lk_seguros l ON a.cus_cust_id=l.CUS_CUST_ID 
+LEFT JOIN temp_45.LK_credits m ON a.CUS_CUST_ID=m.CUS_CUST_ID
 LEFT JOIN temp_45.lk_seller_shipping n ON a.cus_cust_id=n.CUS_CUST_ID_sel
 LEFT JOIN temp_45.buy02_cust o ON a.cus_cust_id=o.cus_cust_id_buy 
 LEFT JOIN whowner.LK_CUS_CUSTOMERS_DATA y ON  a.cus_cust_id=y.cus_cust_id
@@ -159,7 +162,6 @@ WHERE COALESCE(y.CUS_TAGS, '') <> 'sink' AND a.sit_site_id = 'MLB'
 AND ((a.KYC_ENTITY_TYPE = 'company' AND (TIPO_COMPRADOR_TGMV<>'No Compra' OR RANGO_VTA_PURO<> 'a.No Vende') )
 OR (a.KYC_ENTITY_TYPE <> 'company' AND  b.VENTAS_USD >= 6000)) AND a.KYC_ENTITY_TYPE = 'company'
 --GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29, 30, 31, 32, 33
-
 
 
 ) with data primary index (sit_site_id,cus_cust_id);

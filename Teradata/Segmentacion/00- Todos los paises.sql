@@ -108,14 +108,16 @@
 	)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
 
 /* 03: Traigo segment detail max */
-
+	
+	DROP TABLE TEMP_45.sell03_cust;
 	CREATE TABLE TEMP_45.sell03_cust as (
 	SELECT
 	  cus_cust_id_sel,
 	  sit_site_id,
+	  Subcanal,
 	  tpv_segment_detail
 	FROM TEMP_45.sell01_cust
-	group by 1,2,3
+	group by 1,2,3,4
 	qualify row_number () over (partition by cus_cust_id_sel, sit_site_id order by SUM(VENTAS_USD) DESC) = 1
 	)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
 
@@ -127,6 +129,7 @@
 	  a01.cus_cust_id_sel,
 	  a01.sit_site_id,
 	  a02.canal canal_max,
+	  a03.subcanal,
 	  a03.tpv_segment_detail tpv_segment_detail_max,
 	  sum(a01.VENTAS_USD) ventas_usd,
 	  sum(a01.Q) cant_ventas,
@@ -137,7 +140,7 @@
 	left join TEMP_45.sell03_cust a03
 	on a01.cus_cust_id_sel=a03.cus_cust_id_sel
 
-	group by 1,2,3,4
+	group by 1,2,3,4,5
 	)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
 
 /* 05: Agrego segmento seller */
@@ -149,6 +152,7 @@
 	  a.sit_site_id,
 	  b.SEGMENTO,
 	  a.canal_max,
+	  a.subcanal,
 	  a.tpv_segment_detail_max,
 	  a.ventas_usd,
 	  a.cant_ventas,
@@ -169,6 +173,7 @@
 	  b.KYC_COMP_IDNT_NUMBER,
 	  a.SEGMENTO,
 	  a.canal_max,
+	  a.subcanal,
 	  a.tpv_segment_detail_max,
 	  a.ventas_usd,
 	  a.cant_ventas,
@@ -195,6 +200,7 @@
 	    ELSE 'OK' 
 	  END AS CUSTOMER,
 	  a.canal_max,
+	  a.subcanal,
 	  a.tpv_segment_detail_max,
 	  a.ventas_usd,
 	  a.cant_ventas,
@@ -388,6 +394,7 @@
 	  a01.kyc_entity_type,
 	  a01.sit_site_id,
 	  a02.canal canal_max,
+	  a03.subcanal,
 	  a03.tpv_segment_detail tpv_segment_detail_max,
 	  sum(a01.VENTAS_USD) ventas_usd,
 	  sum(a01.Q) cant_ventas,
@@ -398,7 +405,7 @@
 	left join TEMP_45.sell03_doc a03
 	on a01.b2b_id=a03.b2b_id
 
-	group by 1,2,3,4,5,6
+	group by 1,2,3,4,5,6,7
 	)WITH data primary index (b2b_id,SIT_SITE_ID);
 
 /* 05: Agrego segmento seller  */
@@ -436,6 +443,7 @@
 	  a.sit_site_id,
 	  b.segmento_final,
 	  a.canal_max,
+	  a.subcanal,
 	  a.tpv_segment_detail_max,
 	  a.ventas_usd,
 	  a.cant_ventas,
@@ -459,6 +467,7 @@
 	  a.segmento_final,
 	  b.customer_final,
 	  a.canal_max,
+	  a.subcanal,
 	  a.tpv_segment_detail_max,
 	  a.ventas_usd,
 	  a.cant_ventas,
