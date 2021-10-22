@@ -1,0 +1,33 @@
+MIGRACION DE TABLAS A BIGQUERY
+
+1. Base
+
+	LK_TAX_CUST_WRAPPER					Pending  (WIP pero por lo visto tiene para un rato. Chequear en unos dias)
+	LK_KYC_VAULT_USERS					Done
+	LK_CUS_CUSTOMERS_DATA				Done - Falta acceso para chequear campos
+
+2. Data Sellers
+
+	BT_MP_PAY_PAYMENTS  				Done
+	BT_BIDS    							BT_ORD_ORDERS   faltan diccionarios
+	LK_SEGMENTO_SELLERS					Pending    -- Fernando Croceri, cree que ya existe
+	LK_ITE_ITEMS_PH						Done - Chequear campos
+	AG_LK_CAT_CATEGORIES_PH				Done - Chequear campos
+	LK_CUS_CUSTOMER_MCC					Done - Chequear campos
+	lk_mp_mcc_code						Done - Chequear campos
+	LK_ITE_ATTRIBUTE_VALUES				Partial Done
+	lk_op_active_users					Pending
+	BT_MP_SALDOS_SITE					Penging    - Christian Ramirez -- Milagros Natera -- Lourdes Corrales (Reemplazada en 										teradata por BT_MP_SALDOS_SNAPSHOT_DAILY)
+	BT_MP_CREDITS						Done - Chequear campos
+	BT_INSURANCE_PURCHASES              Done - Chequear campos        
+	BT_SHP_SHIPMENTS					Partial Done
+	LK_DOM_DOMAINS						Done - Chequear campos 
+
+3. Metricas
+
+	lk_cus_customer_dates				QA
+	LK_MP_PAY_PAYMENT_METHODS			Pending
+	credits.mc_jarvis					Averiguando  -- Claudio Alberto Lupi -- Walter Allini (Va a estar en Q4)
+	BT_CX_SURVEYS_RESPONSES				Pending (Q3)  -- Marcos Martinez
+	BT_CX_SURVEYS_HIS_CROUPIER			Pending (Q3)  -- Marcos Martinez
+	BT_CM_ORDERS_CANCELLED				Deprecated -- Cual seria la nueva? (van a unir las parciales y las totales en una tabla. 										Este Q esta)  -- Agustin Sajoux

@@ -1,50 +1,7 @@
-/* SEGMENTACION CHILE TERADATA */
 
 
------------------------------ Categorizo account money ------------------------------------------
-
-DROP TABLE TEMP_45.LK_account_money_doc_mlc;
-CREATE TABLE TEMP_45.LK_account_money_doc_mlc as (
-SELECT
-  CASE WHEN v.b2b_id IS NULL THEN am.b2b_id ELSE v.b2b_id END AS b2b_id ,
-  CASE WHEN v.sit_site_id IS NULL THEN am.sit_site_id ELSE v.sit_site_id  END AS sit_site_id,
-
-  CASE WHEN v.VENTAS_USD is null or v.VENTAS_USD=0 or ((v.VENTAS_USD*720)/365) =0 then 'a.No Vende'
-  WHEN am.balance/((v.VENTAS_USD*720)/365) <= 1 THEN 'b.Menos d lo que vende'
-  WHEN am.balance/((v.VENTAS_USD*720)/365) <= 2 THEN 'c.Menos q el doble de lo que vende'
-  WHEN am.balance/((v.VENTAS_USD*720)/365)  <= 5 THEN 'd.Hasta x 5 lo que vende'
-  WHEN am.balance/((v.VENTAS_USD*720)/365) <= 20 THEN 'e.Hasta x 20 lo que vende'
-  ELSE 'f.Mas de x 20 lo que vende' END as Ratio_AM_VTAS,
-
- CASE WHEN am.balance is null or am.balance=0 THEN 'No tiene AM'
-  WHEN  am.balance< (20*720) THEN  'Menos 20 USD'
-  WHEN am.balance<= (100*720)  THEN '20 a 100 USD'
-  WHEN am.balance<= (300*720) THEN '100 a 300 USD'
-  WHEN am.balance<= (1000*720)  THEN '300 a 1000 USD'
-  WHEN am.balance<= (3000*720) THEN  '1000 a 3000 USD'
-  WHEN am.balance<= (1000*720) THEN '3000 a 10000 USD'
-  ELSE 'Mas de 10000 USD' END as ACCOUNT_MONEY
-
-FROM TEMP_45.sell06_doc AS V
-FULL OUTER JOIN TEMP_45.account_money am
-on am.b2b_id=V.b2b_id
-AND am.sit_site_id=V.sit_site_id
-where v.SiT_SITE_ID='MLC' or am.sit_site_id='MLC'
-
-) with data primary index (sit_site_id,b2b_id) ;
-
-
------------------------------ 19. Crea la tabla final ------------------------------------------
-
------------------------------ Creo la base de cust de empresas  ------------------------------------------
-/* Traigo los datos del Vault de KYC marcados como company segun las relglas para el entity type por pais:
-https://docs.google.com/presentation/d/1ExEk8mfT-Z9J6pibfZ8WUqegUOJzDYRpObmZLZzGVHs/edit#slide=id.g7735a7c26a_2_3
-Y elimino los usuarios sink de la tabla de customers, son usuarios creados para carritos y cosas internas.
-*/
-
-
-DROP TABLE TEMP_45.segmentacion_doc_mlc;
-CREATE  TABLE TEMP_45.segmentacion_doc_mlc  AS (
+DROP TABLE TEMP_45.segmentacion_doc_mla;
+CREATE  TABLE TEMP_45.segmentacion_doc_mla  AS (
 
 SELECT
   a.b2b_id, -- 1
@@ -145,7 +102,7 @@ LEFT JOIN temp_45.sell06_doc AS b ON a.b2b_id=b.b2b_id and  a.sit_site_id = b.si
 LEFT JOIN  TEMP_45.LK_br_mx_doc as br_mx ON  a.b2b_id=br_mx.b2b_id  and  a.sit_site_id = br_mx.sit_site_id
 
 LEFT JOIN temp_45.buy01_doc AS f ON a.b2b_id=f.b2b_id   and  a.sit_site_id = f.sit_site_id
-LEFT JOIN TEMP_45.LK_account_money_doc_mlc g ON a.b2b_id=g.b2b_id
+LEFT JOIN TEMP_45.LK_account_money_doc_mla g ON a.b2b_id=g.b2b_id
 LEFT JOIN TEMP_45.LK_LOYALTY h ON a.b2b_id=h.b2b_id 
 LEFT JOIN temp_45.lk_seguros l ON a.b2b_id=l.b2b_id 
 LEFT JOIN temp_45.lk_credits m ON a.b2b_id=m.b2b_id
@@ -154,7 +111,7 @@ LEFT JOIN temp_45.lk_seller_shipping n ON a.b2b_id=n.b2b_id
 LEFT JOIN temp_45.buy03_doc o ON a.b2b_id=o.b2b_id  and  a.sit_site_id = o.sit_site_id
 
 
-WHERE a.sit_site_id = 'MLC' 
+WHERE a.sit_site_id = 'MLA' 
 AND ((a.KYC_ENTITY_TYPE = 'company' AND (TIPO_COMPRADOR_TGMV<>'No Compra' OR RANGO_VTA_PURO<> 'a.No Vende') )
 OR (a.KYC_ENTITY_TYPE <> 'company' AND  b.VENTAS_USD >= 6000)) AND a.KYC_ENTITY_TYPE = 'company'
 --GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29, 30, 31, 32, 33
