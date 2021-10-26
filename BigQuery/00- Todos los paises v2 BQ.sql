@@ -150,7 +150,7 @@ DECLARE to_date DATE DEFAULT '2021-09-30';
 
 	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.sell05_cust;
 	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.sell05_cust as (
-	  select
+	  SELECT
 	  a.cus_cust_id_sel,
 	  a.sit_site_id,
 	  b.SEGMENTO,
@@ -169,25 +169,17 @@ DECLARE to_date DATE DEFAULT '2021-09-30';
 	  a.q_seg
 	FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell04_cust a
 	LEFT JOIN WHOWNER.LK_SEGMENTO_SELLERS  b
-	on a.sit_site_id=b.sit_site_id AND a.cus_cust_id_sel=b.cus_cust_id_sel
+	ON a.sit_site_id=b.sit_site_id AND a.cus_cust_id_sel=b.cus_cust_id_sel
 	) ;
-
-	-------------------------------------
-
-
-
-	NO MIGRADO
-
-
-	------------------------------------------
 
 ----------------------------- 02. Agrupo volumen de compras por buyer y categoria ------------------------------------------
 
 /* 00: Traigo todas las compras en marketplace */
-	DROP TABLE TEMP_45.buy00_cust;
-	CREATE TABLE temp_45.buy00_cust AS ( 
+
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.buy00_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.buy00_cust AS ( 
 	SELECT
-	    bid.ORD_BUYER.ID,  
+	    bid.ORD_BUYER.ID cus_cust_id_buy,  
 	    bid.sit_site_id,
 	    SUM((CASE WHEN ORD_TGMV_FLG = True 
 	          THEN (bid.ORD_ITEM.BASE_CURRENT_PRICE * bid.ORD_ITEM.QTY) 
@@ -198,48 +190,46 @@ DECLARE to_date DATE DEFAULT '2021-09-30';
 	    COUNT(distinct (case when bid.crt_purchase_id is null then bid.ord_order_id else bid.crt_purchase_id end)) as TX_BUY
 
 	FROM WHOWNER.BT_ORD_ORDERS AS bid
-	LEFT JOIN WHOWNER.LK_ITE_ITEMS ite 
-	on (bid.ITE_ITEM_ID = ite.ITE_ITEM_ID AND    
-	bid.PHOTO_ID = ite.PHOTO_ID AND    
-	bid.SiT_SITE_ID = ite.SIT_SITE_ID)  
-
-	LEFT JOIN WHOWNER.AG_LK_CAT_CATEGORIES_PH AS cat    
-	on (ite.sit_site_id = cat.sit_site_id AND
-	ite.cat_Categ_id = cat.cat_Categ_id_l7 AND
-	cat.photo_id = 'TODATE')  
-
+	
 	WHERE bid.sit_site_id IN ('MLA','MLB','MLM','MLC')
 	AND bid.ORD_CLOSED_DT BETWEEN from_date AND to_date
 	AND bid.ORD_GMV_FLG = True --bid.ite_gmv_flag = 1
 	AND bid.ORD_CATEGORY.MARKETPLACE_ID = 'TM' -- bid.mkt_marketplace_id = 'TM'
 	AND bid.ORD_TGMV_FLG= True --tgmv_flag = 1
 	GROUP BY 1,2
-	)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
+	);
 
 /* 01: Traigo los Q en los que hizo compras */
-	
-	DROP TABLE TEMP_45.buy01_cust;
-	CREATE TABLE TEMP_45.buy01_cust AS (
+
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.buy01_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.buy01_cust AS (
 	SELECT
-	    bid.cus_cust_id_buy,  
+	    bid.ORD_BUYER.ID cus_cust_id_buy,
 	    bid.sit_site_id,
-	     ((CAST(EXTRACT(MONTH FROM bid.TIM_DAY_WINNING_DATE) AS BYTEINT)-1)/3)+1
-	  || 'Q' || substring(bid.TIM_DAY_WINNING_DATE,3,2) quarter,    
+	    tim.TIM_QUARTER_ID quarter,    
 	    COUNT(distinct (case when bid.crt_purchase_id is null then bid.ord_order_id else bid.crt_purchase_id end)) as TX_BUY
-	FROM WHOWNER.BT_BIDS as bid
+	FROM WHOWNER.BT_ORD_ORDERS as bid
+    LEFT JOIN WHOWNER.LK_TIM_DAYS tim
+    on bid.ORD_CLOSED_DT= tim.TIM_DAY
 	WHERE bid.sit_site_id IN ('MLA','MLB','MLM','MLC')
-	AND bid.photo_id = 'TODATE' 
-	AND bid.tim_day_winning_date between DATE '2021-01-01' AND DATE '2021-09-30'
-	AND bid.ite_gmv_flag = 1
-	AND bid.mkt_marketplace_id = 'TM'
-	AND tgmv_flag = 1
+    AND bid.ORD_CLOSED_DT BETWEEN from_date AND to_date
+	AND bid.ORD_GMV_FLG = True --bid.ite_gmv_flag = 1
+	AND bid.ORD_CATEGORY.MARKETPLACE_ID = 'TM' -- bid.mkt_marketplace_id = 'TM'
+	AND bid.ORD_TGMV_FLG= True --tgmv_flag = 1
 	group by 1,2,3
-	)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
+	);
 
 /* 02: Categorizo tipo de comprador  */
+	-------------------------------------
 
-	DROP TABLE TEMP_45.buy02_cust ;
-	CREATE TABLE TEMP_45.buy02_cust AS (
+
+
+	NO MIGRADO: CHEQUEAR Q SEGUN FECHA
+
+
+	------------------------------------------
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.buy02_cust ;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.buy02_cust AS (
 	SELECT
 	    tcb.cus_cust_id_buy,  
 	    tcb.sit_site_id,
@@ -250,16 +240,16 @@ DECLARE to_date DATE DEFAULT '2021-09-30';
 	    ELSE 'Menos 1Q'  end as Q_cuenta,
 	    CASE WHEN cdt.cus_first_buy_no_bonif_autoof IS null THEN 'Nunca Compro' ELSE 'Compro' END AS NB,
 	    COUNT(distinct quarter) cant_q_compras  
-	FROM TEMP_45.buy01_cust tcb
+	FROM meli-bi-data.SBOX_B2B_MKTPLACE.buy01_cust tcb
 	LEFT JOIN WHOWNER.LK_CUS_CUSTOMER_DATES CDT ON CDT.CUS_CUST_ID=tcb.CUS_CUST_ID_BUY AND CDT.sit_site_id=tcb.SIT_SITE_ID
 	group by 1,2,3,4
 
-	)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
+	);
 
 ----------------------------- 03. Unifico compras y ventas en una base comun ------------------------------------------
 
-	DROP TABLE TEMP_45.base00_cust;
-	CREATE TABLE TEMP_45.base00_cust AS (
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.base00_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.base00_cust AS (
 		SELECT
 		coalesce(a.cus_cust_id_sel, b.cus_cust_id_buy) cus_cust_id, 
   		a.cus_cust_id_sel,
@@ -276,35 +266,27 @@ DECLARE to_date DATE DEFAULT '2021-09-30';
 	  	b.TGMV_BUY,
 	  	b.TORDERS_BUY,
 	  	b.TSI_BUY,
-	  	b.TX_BUY,
-	  	b.TASP_BUY
+	  	b.TX_BUY
 
-	FROM TEMP_45.sell05_cust a
-	FULL OUTER JOIN TEMP_45.buy00_cust b
+	FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell05_cust a
+	FULL OUTER JOIN meli-bi-data.SBOX_B2B_MKTPLACE.buy00_cust b
 	ON a.cus_cust_id_sel=b.cus_cust_id_buy 
+	);
 
-	)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id);
-
-
-	DROP TABLE TEMP_45.base01_cust;
-	CREATE TABLE TEMP_45.base01_cust AS (
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.base01_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.base01_cust AS (
 		SELECT
 		a.*,
-		CASE WHEN b.cus_internal_tags LIKE '%internal_user%' OR b.cus_internal_tags LIKE '%internal_third_party%' THEN 'MELI-1P/PL'
-	    WHEN b.cus_internal_tags LIKE '%cancelled_account%' THEN 'Cuenta_ELIMINADA'
-	    WHEN b.cus_internal_tags LIKE '%operators_root%' THEN 'Operador_Root'
-	    WHEN b.cus_internal_tags LIKE '%operator%' THEN 'Operador'
-	    ELSE 'OK' 
-	  END AS CUSTOMER
+		CUS_PARTY_TYPE_ID AS CUSTOMER
 
-	FROM TEMP_45.base00_cust a
+	FROM meli-bi-data.SBOX_B2B_MKTPLACE.base00_cust a
 	LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA b
 	ON a.cus_cust_id=b.cus_cust_id
-	WHERE COALESCE(b.CUS_TAGS, '') <> 'sink'
-	)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id);
+	WHERE 'sink' not in unnest(b.CUS_TAGS)
+	);
 
-	DROP TABLE TEMP_45.base02_cust;
-	CREATE TABLE TEMP_45.base02_cust AS (
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.base02_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.base02_cust AS (
 		SELECT
 		a.*,
 		b.KYC_ENTITY_TYPE,
@@ -314,15 +296,24 @@ DECLARE to_date DATE DEFAULT '2021-09-30';
 		b.KYC_COMP_SOCIETY_TYPE,
 		b.KYC_COMP_INCOME,
 		b.KYC_COMP_IDNT_ID,
-		b.KYC_COMP_IDNT_NUMBER,
+		--b.KYC_COMP_IDNT_NUMBER,
 		b.KYC_COMP_CORPORATE_NAME
-	FROM TEMP_45.base01_cust a
+	FROM meli-bi-data.SBOX_B2B_MKTPLACE.base01_cust a
 	LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
 	ON a.cus_cust_id=b.cus_cust_id
-	)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id);
+	);
 
 
------- DOC ------
+
+	-------------------------------------
+
+
+
+	NO MIGRADO
+
+
+	------------------------------------------
+
 
 ------ DOC ------
 
