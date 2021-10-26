@@ -1,5 +1,6 @@
-/* SEGMENTACION  TERADATA */
-
+/* SEGMENTACION  BIGQUERY */
+DECLARE from_date DATE DEFAULT '2021-01-01';  
+DECLARE to_date DATE DEFAULT '2021-09-30';
 
 ------ CUST ------
 
@@ -19,7 +20,7 @@
 		FROM `meli-bi-data.WHOWNER.BT_MP_PAY_PAYMENTS`  mp
 		WHERE mp.tpv_flag = 1
 		AND mp.sit_site_id IN ('MLA','MLB','MLM','MLC')
-		AND MP.PAY_MOVE_DATE BETWEEN DATE '2021-01-01' AND DATE '2021-09-30'
+		AND MP.PAY_MOVE_DATE BETWEEN from_date AND to_date
 		AND mp.pay_status_id IN ( 'approved')--, 'authorized')
 		AND tpv_segment_id <> 'ON'--AND coalesce(i.ITE_TIPO_PROD,0) <> 'U' -----> Saco todo lo que es Marketplace
 		GROUP BY 1,2,3,4
@@ -40,7 +41,7 @@
 		FROM WHOWNER.BT_ORD_ORDERS as bid
 		WHERE bid.sit_site_id IN ('MLA','MLB','MLM','MLC')
 		-- AND bid.photo_id = 'TODATE' CAMPO DEPRECADO
-		AND bid.ORD_CLOSED_DT BETWEEN DATE '2020-09-01' AND DATE '2021-08-31'
+		AND bid.ORD_CLOSED_DT BETWEEN from_date AND to_date
 		AND bid.ORD_GMV_FLG = True -- bid.ite_gmv_flag = 1
 		AND bid.ORD_CATEGORY.MARKETPLACE_ID = 'TM' -- bid.mkt_marketplace_id = 'TM'
 		AND coalesce(BID.ORD_AUTO_OFFER_FLG, False) <> True --coalesce(BID.AUTO_OFFER_FLAG, 0) <> 1
@@ -186,19 +187,18 @@
 	DROP TABLE TEMP_45.buy00_cust;
 	CREATE TABLE temp_45.buy00_cust AS ( 
 	SELECT
-	    bid.cus_cust_id_buy,  
+	    bid.ORD_BUYER.ID,  
 	    bid.sit_site_id,
-	    SUM((CASE WHEN tgmv_flag = 1 
-	          THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) 
+	    SUM((CASE WHEN ORD_TGMV_FLG = True 
+	          THEN (bid.ORD_ITEM.BASE_CURRENT_PRICE * bid.ORD_ITEM.QTY) 
 	          ELSE 0.0 
 	        END))  TGMV_BUY, -- TGMV
-	    COUNT((CASE WHEN tgmv_flag = 1 then BID.BID_QUANTITY_OK else 0.0 end))  TORDERS_BUY,
-	    SUM((CASE WHEN tgmv_flag = 1 then BID.BID_QUANTITY_OK else 0.0 end))  TSI_BUY, -- TSI
-	    COUNT(distinct (case when bid.crt_purchase_id is null then bid.ord_order_id else bid.crt_purchase_id end)) as TX_BUY,
-	    TGMV_BUY/TSI_BUY TASP_BUY
+	    COUNT((CASE WHEN ORD_TGMV_FLG = True then BID.ORD_ITEM.QTY else 0.0 end))  TORDERS_BUY,
+	    SUM((CASE WHEN ORD_TGMV_FLG = True then BID.ORD_ITEM.QTY else 0.0 end))  TSI_BUY, -- TSI
+	    COUNT(distinct (case when bid.crt_purchase_id is null then bid.ord_order_id else bid.crt_purchase_id end)) as TX_BUY
 
-	FROM WHOWNER.BT_BIDS AS bid
-	LEFT JOIN WHOWNER.LK_ITE_ITEMS_PH ite 
+	FROM WHOWNER.BT_ORD_ORDERS AS bid
+	LEFT JOIN WHOWNER.LK_ITE_ITEMS ite 
 	on (bid.ITE_ITEM_ID = ite.ITE_ITEM_ID AND    
 	bid.PHOTO_ID = ite.PHOTO_ID AND    
 	bid.SiT_SITE_ID = ite.SIT_SITE_ID)  
@@ -209,11 +209,10 @@
 	cat.photo_id = 'TODATE')  
 
 	WHERE bid.sit_site_id IN ('MLA','MLB','MLM','MLC')
-	AND bid.photo_id = 'TODATE'
-	AND bid.tim_day_winning_date BETWEEN DATE '2021-01-01' AND DATE '2021-09-30'
-	AND bid.ite_gmv_flag = 1
-	AND bid.mkt_marketplace_id = 'TM'
-	AND tgmv_flag = 1
+	AND bid.ORD_CLOSED_DT BETWEEN from_date AND to_date
+	AND bid.ORD_GMV_FLG = True --bid.ite_gmv_flag = 1
+	AND bid.ORD_CATEGORY.MARKETPLACE_ID = 'TM' -- bid.mkt_marketplace_id = 'TM'
+	AND bid.ORD_TGMV_FLG= True --tgmv_flag = 1
 	GROUP BY 1,2
 	)WITH DATA PRIMARY INDEX (sit_site_id,cus_cust_id_buy);
 
