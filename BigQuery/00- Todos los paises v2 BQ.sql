@@ -7,49 +7,51 @@
 
 /* 00: Traigo todos los datos de Mercado Pago de ventas por seller y canal */
 
-	DROP TABLE TEMP_45.sell00_cust;
-	CREATE TABLE TEMP_45.sell00_cust AS (
-	SELECT
-	  mp.cus_cust_id_sel cus_cust_id_sel, --- numero de usuario
-	  mp.sit_site_id sit_site_id, --- site
-	  tpv_segment_id tpv_segment_id, --- Segmento de donde vende
-	  tpv_segment_detail tpv_segment_detail, --- + detalle
-	  SUM (PAY_TRANSACTION_DOL_AMT) VENTAS_USD, --- suma volumen de ventas
-	  SUM (1) Q -- para contar la cantidad de segmentos que se vende   COUNT (tpv_segment_id) Q2
-	FROM WHOWNER.BT_MP_PAY_PAYMENTS mp
-	WHERE mp.tpv_flag = 1
-	AND mp.sit_site_id IN ('MLA','MLB','MLM','MLC')
-	AND MP.PAY_MOVE_DATE BETWEEN DATE '2021-01-01' AND DATE '2021-09-30'
-	AND mp.pay_status_id IN ( 'approved')--, 'authorized')
-	AND tpv_segment_id <> 'ON'--AND coalesce(i.ITE_TIPO_PROD,0) <> 'U' -----> Saco todo lo que es Marketplace
-	GROUP BY 1,2,3,4
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.sell00_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.sell00_cust AS (
+		SELECT
+		  mp.cus_cust_id_sel cus_cust_id_sel, --- numero de usuario
+		  mp.sit_site_id sit_site_id, --- site
+		  tpv_segment_id tpv_segment_id, --- Segmento de donde vende
+		  tpv_segment_detail tpv_segment_detail, --- + detalle
+		  SUM (PAY_TRANSACTION_DOL_AMT) VENTAS_USD, --- suma volumen de ventas
+		  SUM (1) Q -- para contar la cantidad de segmentos que se vende   COUNT (tpv_segment_id) Q2
+		FROM `meli-bi-data.WHOWNER.BT_MP_PAY_PAYMENTS`  mp
+		WHERE mp.tpv_flag = 1
+		AND mp.sit_site_id IN ('MLA','MLB','MLM','MLC')
+		AND MP.PAY_MOVE_DATE BETWEEN DATE '2021-01-01' AND DATE '2021-09-30'
+		AND mp.pay_status_id IN ( 'approved')--, 'authorized')
+		AND tpv_segment_id <> 'ON'--AND coalesce(i.ITE_TIPO_PROD,0) <> 'U' -----> Saco todo lo que es Marketplace
+		GROUP BY 1,2,3,4
 
-	UNION --- para poder hacer union las dos tablas son iguales
+		UNION ALL --- para poder hacer union las dos tablas son iguales
 
 	/* Comment: Traigo todos los datos de Marketplace */
 
-	SELECT
-	  bid.cus_cust_id_sel cus_cust_id_sel,  
-	  bid.sit_site_id sit_site_id,
-	  'Selling Marketplace' tpv_segment_id,
-	  'Selling Marketplace' tpv_segment_detail,
-	  SUM((CASE WHEN coalesce(bid.BID_FVF_BONIF, 'Y') = 'N' THEN (bid.BID_BASE_CURRENT_PRICE * bid.BID_QUANTITY_OK) ELSE 0.0 END))  VENTAS_USD,
-	  SUM (1) Q
-	FROM WHOWNER.BT_BIDS as bid
-	where bid.sit_site_id IN ('MLA','MLB','MLM','MLC')
-	AND bid.photo_id = 'TODATE'
-	AND bid.tim_day_winning_date BETWEEN DATE '2021-01-01' AND DATE '2021-09-30'
-	AND bid.ite_gmv_flag = 1
-	AND bid.mkt_marketplace_id = 'TM'
-	AND coalesce(BID.AUTO_OFFER_FLAG, 0) <> 1
-	AND coalesce(bid.BID_FVF_BONIF, 'Y') = 'N'
-	GROUP BY 1,2,3,4
-	) WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
+		SELECT
+			bid.ORD_SELLER.ID  cus_cust_id_sel,  
+			bid.sit_site_id sit_site_id,
+			'Selling Marketplace' tpv_segment_id,
+			'Selling Marketplace' tpv_segment_detail,
+	  	 	SUM(( CASE WHEN coalesce(bid.ORD_FVF_BONIF, True) = False 
+	    	THEN (bid.ORD_ITEM.BASE_CURRENT_PRICE * 
+			bid.ORD_ITEM.QTY) ELSE 0.0 END))  VENTAS_USD,
+			SUM (1) Q
+		FROM WHOWNER.BT_ORD_ORDERS as bid
+		WHERE bid.sit_site_id IN ('MLA','MLB','MLM','MLC')
+		-- AND bid.photo_id = 'TODATE' CAMPO DEPRECADO
+		AND bid.ORD_CLOSED_DT BETWEEN DATE '2020-09-01' AND DATE '2021-08-31'
+		AND bid.ORD_GMV_FLG = True -- bid.ite_gmv_flag = 1
+		AND bid.ORD_CATEGORY.MARKETPLACE_ID = 'TM' -- bid.mkt_marketplace_id = 'TM'
+		AND coalesce(BID.ORD_AUTO_OFFER_FLG, False) <> True --coalesce(BID.AUTO_OFFER_FLAG, 0) <> 1
+		AND coalesce(bid.ORD_FVF_BONIF, True) = False --coalesce(bid.BID_FVF_BONIF, 'Y') = 'N'
+		GROUP BY 1,2,3,4
+);
 
 /* 01: Agrego canal y sub canal */
 
-	DROP TABLE TEMP_45.sell01_cust;
-	CREATE TABLE TEMP_45.sell01_cust as (
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.sell01_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.sell01_cust as (
 	  SELECT   
 	  cus_cust_id_sel,
 	  sit_site_id,
@@ -91,40 +93,40 @@
 	  tpv_segment_detail,
 	  VENTAS_USD,
 	  Q
-	FROM TEMP_45.sell00_cust
-	)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
+	FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell00_cust
+	);
 
 /* 02: Traigo canal max */
 
-	DROP TABLE TEMP_45.sell02_cust;
-	CREATE TABLE TEMP_45.sell02_cust as (
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.sell02_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.sell02_cust as (
 	SELECT
 	  cus_cust_id_sel,
 	  sit_site_id,
 	  Canal
-	FROM TEMP_45.sell01_cust
+	FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell01_cust
 	group by 1,2,3
 	qualify row_number () over (partition by cus_cust_id_sel, sit_site_id order by SUM(VENTAS_USD) DESC) = 1
-	)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
+	);
 
 /* 03: Traigo segment detail max */
 	
-	DROP TABLE TEMP_45.sell03_cust;
-	CREATE TABLE TEMP_45.sell03_cust as (
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.sell03_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.sell03_cust as (
 	SELECT
 	  cus_cust_id_sel,
 	  sit_site_id,
 	  Subcanal,
 	  tpv_segment_detail
-	FROM TEMP_45.sell01_cust
+	FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell01_cust
 	group by 1,2,3,4
 	qualify row_number () over (partition by cus_cust_id_sel, sit_site_id order by SUM(VENTAS_USD) DESC) = 1
-	)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
+	);
 
 /* 04: Unifico */
 
-	DROP TABLE TEMP_45.sell04_cust;
-	CREATE TABLE TEMP_45.sell04_cust as (
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.sell04_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.sell04_cust as (
 	SELECT
 	  a01.cus_cust_id_sel,
 	  a01.sit_site_id,
@@ -134,19 +136,19 @@
 	  sum(a01.VENTAS_USD) ventas_usd,
 	  sum(a01.Q) cant_ventas,
 	  count(distinct a01.tpv_segment_detail ) q_seg
-	FROM TEMP_45.sell01_cust a01
-	left join TEMP_45.sell02_cust a02
+	FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell01_cust a01
+	LEFT JOIN meli-bi-data.SBOX_B2B_MKTPLACE.sell02_cust a02
 	on a01.cus_cust_id_sel=a02.cus_cust_id_sel
-	left join TEMP_45.sell03_cust a03
+	LEFT join meli-bi-data.SBOX_B2B_MKTPLACE.sell03_cust a03
 	on a01.cus_cust_id_sel=a03.cus_cust_id_sel
 
 	group by 1,2,3,4,5
-	)WITH data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID);
+	);
 
-/* 05: Agrego segmento seller */
+/* 05: Agrego segmento seller y armo el rango de ventas puro */
 
-	DROP TABLE TEMP_45.sell05_cust;
-	CREATE TABLE TEMP_45.sell05_cust as (
+	DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.sell05_cust;
+	CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.sell05_cust as (
 	  select
 	  a.cus_cust_id_sel,
 	  a.sit_site_id,
@@ -164,12 +166,19 @@
 	  a.ventas_usd,
 	  a.cant_ventas,
 	  a.q_seg
-	FROM TEMP_45.sell04_cust a
+	FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell04_cust a
 	LEFT JOIN WHOWNER.LK_SEGMENTO_SELLERS  b
 	on a.sit_site_id=b.sit_site_id AND a.cus_cust_id_sel=b.cus_cust_id_sel
-	) with data primary index (CUS_CUST_ID_SEL,SIT_SITE_ID) ;
+	) ;
+
+	-------------------------------------
 
 
+
+	NO MIGRADO
+
+
+	------------------------------------------
 
 ----------------------------- 02. Agrupo volumen de compras por buyer y categoria ------------------------------------------
 
