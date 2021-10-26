@@ -1,7 +1,7 @@
 
 
-DROP TABLE TEMP_45.segmentacion_doc_mla;
-CREATE  TABLE TEMP_45.segmentacion_doc_mla  AS (
+DROP TABLE TEMP_45.segmentacion_doc;
+CREATE  TABLE TEMP_45.segmentacion_doc AS (
 
 SELECT
   a.b2b_id, -- 1
@@ -16,7 +16,7 @@ SELECT
   a.customer_final,--8
   br_mx.cus_tax_payer_type,--9
   br_mx.cus_tax_regime, --10
-  CASE WHEN f.TGMVEBILLABLE IS NULL or f.TGMVEBILLABLE=0 THEN 'No Compra' 
+  CASE WHEN f.TGMV_BUY IS NULL or f.TGMV_BUY=0 THEN 'No Compra' 
   ELSE 'Compra' END  as TIPO_COMPRADOR_TGMV, -- 11
   CASE WHEN b.VENTAS_USD IS null THEN 'a.No Vende'
     WHEN b.VENTAS_USD= 0 THEN 'a.No Vende'
@@ -63,21 +63,22 @@ SELECT
     WHEN b.Q_SEG + SEGUROS + CREDITOS + SHIPPING >= 5 THEN 3
     ELSE NULL
   END AS ECOSISTEMA, -- 24
-  CASE WHEN f.TGMVEBILLABLE IS NULL AND o.NB='Nunca Compro' THEN 'Not Buyer'
-    WHEN f.TGMVEBILLABLE IS NULL AND o.NB='Compro' THEN 'Recover'
-    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta in ('Menos 1Q','1Q')  AND o.cant_q_compras >=1 THEN 'Frequent_NB'
-    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta in ('Menos 1Q','1Q')  AND o.cant_q_compras <1 THEN 'Non Frequent'
-    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='2Q' AND o.cant_q_compras >=2 THEN 'Frequent_NB'
-    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='2Q' AND o.cant_q_compras <2 THEN 'Non Frequent'
-    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='3Q' AND o.cant_q_compras >=3 THEN 'Frequent_NB'
-    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='3Q' AND o.cant_q_compras <3 THEN 'Non Frequent'
-    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='OK' AND o.cant_q_compras >=4 THEN 'Frequent'
-    WHEN f.TGMVEBILLABLE IS not NULL AND o.q_cuenta='OK' AND o.cant_q_compras <4 THEN 'Non Frequent'
+  CASE WHEN f.TGMV_BUY IS NULL AND o.NB='Nunca Compro' THEN 'Not Buyer'
+    WHEN f.TGMV_BUY IS NULL AND o.NB='Compro' THEN 'Recover'
+    WHEN f.TGMV_BUY IS not NULL AND o.q_cuenta in ('Menos 1Q','1Q')  AND o.cant_q_compras >=1 THEN 'Non Frequent'
+    WHEN f.TGMV_BUY IS not NULL AND o.q_cuenta in ('Menos 1Q','1Q')  AND o.cant_q_compras <1 THEN 'Non Frequent'
+    WHEN f.TGMV_BUY IS not NULL AND o.q_cuenta='2Q' AND o.cant_q_compras >=2 THEN 'Frequent_NB'
+    WHEN f.TGMV_BUY IS not NULL AND o.q_cuenta='2Q' AND o.cant_q_compras <2 THEN 'Non Frequent'
+    WHEN f.TGMV_BUY IS not NULL AND o.q_cuenta='3Q' AND o.cant_q_compras >=3 THEN 'Frequent_NB'
+    WHEN f.TGMV_BUY IS not NULL AND o.q_cuenta='3Q' AND o.cant_q_compras <3 THEN 'Non Frequent'
+    WHEN f.TGMV_BUY IS not NULL AND o.q_cuenta='OK' AND o.cant_q_compras >=4 THEN 'Frequent'
+    WHEN f.TGMV_BUY IS not NULL AND o.q_cuenta='OK' AND o.cant_q_compras <4 THEN 'Non Frequent'
     ELSE 'TBD'
   END AS Frequencia, -- 25
-  CASE WHEN Frequencia='TBD' then 'Non Buyer'
+  CASE WHEN Frequencia in ('TBD','Recover','Not Buyer') then 'Non Buyer'
   when Frequencia='Non Frequent' then 'Buyer'
-  ELSE 'Frequent Buyer'
+  when Frequencia='Frequent' or Frequencia  = 'Frequent_NB' then 'Frequent Buyer'
+  ELSE 'A definir'
   end Agg_Frecuencia, -- 26
   (3*coalesce(LOYALTY,0))+(4*coalesce(ECOSISTEMA,0))+(3*coalesce(am_rank,0)) engagement, -- 27
   CASE WHEN engagement <=10 THEN 1
@@ -85,7 +86,7 @@ SELECT
     ELSE 3 
   END engagement_rank, -- 28
   
-  CASE WHEN Agg_Frecuencia='Non Buyer' then 'Not Buyer'
+  CASE WHEN Agg_Frecuencia='Non Buyer'  then 'Not Buyer'
   when Agg_Frecuencia='Buyer' then 'Buyer Not Engaged'
   when engagement_rank=1 and Agg_Frecuencia= 'Frequent Buyer' then 'Buyer Not Engaged'
   when engagement_rank=2 and Agg_Frecuencia= 'Frequent Buyer' then 'Frequent Engaged Buyer'
@@ -94,15 +95,18 @@ SELECT
   end as buyer_segment, --29
   
   b.VENTAS_USD VENTAS_USD,
-  f.TGMVEBILLABLE  bgmv_cpras,
+  f.TGMV_BUY  bgmv_cpras,
+  f.torders_buy,
+  f.tsi_buy,
+  f.tx_buy,
+
 
   a.kyc_comp_corporate_name
 FROM TEMP_45.kyc_customer a
 LEFT JOIN temp_45.sell06_doc AS b ON a.b2b_id=b.b2b_id and  a.sit_site_id = b.sit_site_id
 LEFT JOIN  TEMP_45.LK_br_mx_doc as br_mx ON  a.b2b_id=br_mx.b2b_id  and  a.sit_site_id = br_mx.sit_site_id
-
 LEFT JOIN temp_45.buy01_doc AS f ON a.b2b_id=f.b2b_id   and  a.sit_site_id = f.sit_site_id
-LEFT JOIN TEMP_45.LK_account_money_doc_mla g ON a.b2b_id=g.b2b_id
+LEFT JOIN TEMP_45.LK_account_money_doc g ON a.b2b_id=g.b2b_id
 LEFT JOIN TEMP_45.LK_LOYALTY h ON a.b2b_id=h.b2b_id 
 LEFT JOIN temp_45.lk_seguros l ON a.b2b_id=l.b2b_id 
 LEFT JOIN temp_45.lk_credits m ON a.b2b_id=m.b2b_id
@@ -111,8 +115,7 @@ LEFT JOIN temp_45.lk_seller_shipping n ON a.b2b_id=n.b2b_id
 LEFT JOIN temp_45.buy03_doc o ON a.b2b_id=o.b2b_id  and  a.sit_site_id = o.sit_site_id
 
 
-WHERE a.sit_site_id = 'MLA' 
-AND ((a.KYC_ENTITY_TYPE = 'company' AND (TIPO_COMPRADOR_TGMV<>'No Compra' OR RANGO_VTA_PURO<> 'a.No Vende') )
+WHERE ((a.KYC_ENTITY_TYPE = 'company' AND (TIPO_COMPRADOR_TGMV<>'No Compra' OR RANGO_VTA_PURO<> 'a.No Vende') )
 OR (a.KYC_ENTITY_TYPE <> 'company' AND  b.VENTAS_USD >= 6000)) AND a.KYC_ENTITY_TYPE = 'company'
 --GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22, 23, 24,25,26, 27,28, 29, 30, 31, 32, 33
 
