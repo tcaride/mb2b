@@ -1,0 +1,8 @@
+Proceso de segmentacion 
+
+1- 	a. Bajarse de Teradata las tablas de LOYALTY (Con el ultimo mes como fecha) y LK_TAX_CUST_WRAPPER. (00 - Bajadas.sql).
+	b. Subirlas a BigQuery con los nommbres LK_LOYALTY_cust y LK_TAX_CUST_WRAPPER.
+
+2- Correr el archivo de queries base (01- Queries Base.sql) modificando los settings para que tomen los ultimos 12 meses. Este archivo contiene la creacion de tablas que vamos a usar como dimensiones en la segmentacion.
+
+3- Correr el archivo de metricas (02- Todos los paises.sql) 
