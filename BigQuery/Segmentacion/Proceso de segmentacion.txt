@@ -5,4 +5,4 @@ Proceso de segmentacion
 
 2- Correr el archivo de queries base (01- Queries Base.sql) modificando los settings para que tomen los ultimos 12 meses. Este archivo contiene la creacion de tablas que vamos a usar como dimensiones en la segmentacion.
 
-3- Correr el archivo de metricas (02- Todos los paises.sql) 
+3- Correr el archivo de metricas (02- Todos los paises.sql) modificando los settings para que tomen los ultimos 12 meses. 

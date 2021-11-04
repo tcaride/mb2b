@@ -4,8 +4,14 @@
 ------ SETTINGS ------
 
 DECLARE from_date DATE DEFAULT '2020-11-01';  
-DECLARE to_date DATE DEFAULT '2021-10-30';
+DECLARE to_date DATE DEFAULT '2021-10-31';
 DECLARE from_date_account_money DATE DEFAULT '2021-04-20';  -- UNAV_AMOUNT esta disponible desde esta fecha en la tabla
+DECLARE cambio_mlm NUMERIC DEFAULT 20;
+DECLARE cambio_mlb NUMERIC DEFAULT 5;
+DECLARE cambio_mlc NUMERIC DEFAULT 745;
+DECLARE cambio_mla NUMERIC DEFAULT 93;
+
+
 
 /* ------------------------- Corro a nivel CUST ID ---------------------- */
 
@@ -119,8 +125,8 @@ CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.vert as (
 
 ----------------------------- 05- Traigo la plata en cuenta de mercadopago por cust ------------------------------------------
 
-  DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.LK_ACCOUNT_MONEY_CUST;
-  CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.LK_ACCOUNT_MONEY_CUST as (
+  DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.LK00_ACCOUNT_MONEY_CUST;
+  CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.LK00_ACCOUNT_MONEY_CUST as (
   SELECT
     cus_cust_id,
     sit_site_id,
@@ -131,7 +137,158 @@ CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.vert as (
   GROUP BY 1,2
   ) ;
 
+----------------------------- 06- Metricas de Account Money en dolares ------------------------------------------
 
+  DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.LK01_ACCOUNT_MONEY_CUST;
+  CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.LK01_ACCOUNT_MONEY_CUST as (
+ 
+  SELECT
+    CASE WHEN v.cus_cust_id_sel IS NULL THEN am.cus_cust_id ELSE v.cus_cust_id_sel END AS cus_cust_id ,
+    CASE WHEN v.sit_site_id IS NULL THEN am.sit_site_id ELSE v.sit_site_id  END AS sit_site_id,
+
+    CASE WHEN v.VENTAS_USD is null or v.VENTAS_USD=0 or ((v.VENTAS_USD*cambio_mlm)/365) =0 then 'a.No Vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlm)/365) <= 1 THEN 'b.Menos d lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlm)/365) <= 2 THEN 'c.Menos q el doble de lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlm)/365)  <= 5 THEN 'd.Hasta x 5 lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlm)/365) <= 20 THEN 'e.Hasta x 20 lo que vende'
+    ELSE 'f.Mas de x 20 lo que vende' END as Ratio_AM_VTAS,
+
+   CASE WHEN am.balance is null or am.balance=0 THEN 'No tiene AM'
+    WHEN  am.balance< (20*cambio_mlm) THEN  'Menos 20 USD'
+    WHEN am.balance<= (100*cambio_mlm)  THEN '20 a 100 USD'
+    WHEN am.balance<= (300*cambio_mlm) THEN '100 a 300 USD'
+    WHEN am.balance<= (1000*cambio_mlm)  THEN '300 a 1000 USD'
+    WHEN am.balance<= (3000*cambio_mlm) THEN  '1000 a 3000 USD'
+    WHEN am.balance<= (1000*cambio_mlm) THEN '3000 a 10000 USD'
+    ELSE 'Mas de 10000 USD' END as ACCOUNT_MONEY
+
+  FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell05_cust AS V
+  FULL OUTER JOIN meli-bi-data.SBOX_B2B_MKTPLACE.LK00_ACCOUNT_MONEY_CUST am
+  on am.cus_cust_id=V.cus_cust_id_sel
+  AND am.sit_site_id=V.sit_site_id
+  where v.SiT_SITE_ID='MLM' or am.sit_site_id='MLM'
+
+UNION ALL
+
+  SELECT
+    CASE WHEN v.cus_cust_id_sel IS NULL THEN am.cus_cust_id ELSE v.cus_cust_id_sel END AS cus_cust_id ,
+    CASE WHEN v.sit_site_id IS NULL THEN am.sit_site_id ELSE v.sit_site_id  END AS sit_site_id,
+
+    CASE WHEN v.VENTAS_USD is null or v.VENTAS_USD=0 or ((v.VENTAS_USD*cambio_mlc)/365) =0 then 'a.No Vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlc)/365) <= 1 THEN 'b.Menos d lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlc)/365) <= 2 THEN 'c.Menos q el doble de lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlc)/365)  <= 5 THEN 'd.Hasta x 5 lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlc)/365) <= 20 THEN 'e.Hasta x 20 lo que vende'
+    ELSE 'f.Mas de x 20 lo que vende' END as Ratio_AM_VTAS,
+
+   CASE WHEN am.balance is null or am.balance=0 THEN 'No tiene AM'
+    WHEN  am.balance< (20*cambio_mlc) THEN  'Menos 20 USD'
+    WHEN am.balance<= (100*cambio_mlc)  THEN '20 a 100 USD'
+    WHEN am.balance<= (300*cambio_mlc) THEN '100 a 300 USD'
+    WHEN am.balance<= (1000*cambio_mlc)  THEN '300 a 1000 USD'
+    WHEN am.balance<= (3000*cambio_mlc) THEN  '1000 a 3000 USD'
+    WHEN am.balance<= (1000*cambio_mlc) THEN '3000 a 10000 USD'
+    ELSE 'Mas de 10000 USD' END as ACCOUNT_MONEY
+
+  FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell05_cust AS V
+  FULL OUTER JOIN meli-bi-data.SBOX_B2B_MKTPLACE.LK00_ACCOUNT_MONEY_CUST am
+  on am.cus_cust_id=V.cus_cust_id_sel
+  AND am.sit_site_id=V.sit_site_id
+  where v.SiT_SITE_ID='MLC' or am.sit_site_id='MLC'
+
+UNION ALL 
+  SELECT
+    CASE WHEN v.cus_cust_id_sel IS NULL THEN am.cus_cust_id ELSE v.cus_cust_id_sel END AS cus_cust_id ,
+    CASE WHEN v.sit_site_id IS NULL THEN am.sit_site_id ELSE v.sit_site_id  END AS sit_site_id,
+
+    CASE WHEN v.VENTAS_USD is null or v.VENTAS_USD=0 or ((v.VENTAS_USD*cambio_mlb)/365) =0 then 'a.No Vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlb)/365) <= 1 THEN 'b.Menos d lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlb)/365) <= 2 THEN 'c.Menos q el doble de lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlb)/365)  <= 5 THEN 'd.Hasta x 5 lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mlb)/365) <= 20 THEN 'e.Hasta x 20 lo que vende'
+    ELSE 'f.Mas de x 20 lo que vende' END as Ratio_AM_VTAS,
+
+   CASE WHEN am.balance is null or am.balance=0 THEN 'No tiene AM'
+    WHEN  am.balance< (20*cambio_mlb) THEN  'Menos 20 USD'
+    WHEN am.balance<= (100*cambio_mlb)  THEN '20 a 100 USD'
+    WHEN am.balance<= (300*cambio_mlb) THEN '100 a 300 USD'
+    WHEN am.balance<= (1000*cambio_mlb)  THEN '300 a 1000 USD'
+    WHEN am.balance<= (3000*cambio_mlb) THEN  '1000 a 3000 USD'
+    WHEN am.balance<= (1000*cambio_mlb) THEN '3000 a 10000 USD'
+    ELSE 'Mas de 10000 USD' END as ACCOUNT_MONEY
+
+  FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell05_cust AS V
+  FULL OUTER JOIN meli-bi-data.SBOX_B2B_MKTPLACE.LK00_ACCOUNT_MONEY_CUST am
+  on am.cus_cust_id=V.cus_cust_id_sel
+  AND am.sit_site_id=V.sit_site_id
+  where v.SiT_SITE_ID='MLB' or am.sit_site_id='MLB'
+
+  
+UNION ALL 
+  SELECT
+    CASE WHEN v.cus_cust_id_sel IS NULL THEN am.cus_cust_id ELSE v.cus_cust_id_sel END AS cus_cust_id ,
+    CASE WHEN v.sit_site_id IS NULL THEN am.sit_site_id ELSE v.sit_site_id  END AS sit_site_id,
+
+    CASE WHEN v.VENTAS_USD is null or v.VENTAS_USD=0 or ((v.VENTAS_USD*cambio_mla)/365) =0 then 'a.No Vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mla)/365) <= 1 THEN 'b.Menos d lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mla)/365) <= 2 THEN 'c.Menos q el doble de lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mla)/365)  <= 5 THEN 'd.Hasta x 5 lo que vende'
+    WHEN am.balance/((v.VENTAS_USD*cambio_mla)/365) <= 20 THEN 'e.Hasta x 20 lo que vende'
+    ELSE 'f.Mas de x 20 lo que vende' END as Ratio_AM_VTAS,
+
+   CASE WHEN am.balance is null or am.balance=0 THEN 'No tiene AM'
+    WHEN  am.balance< (20*cambio_mla) THEN  'Menos 20 USD'
+    WHEN am.balance<= (100*cambio_mla)  THEN '20 a 100 USD'
+    WHEN am.balance<= (300*cambio_mla) THEN '100 a 300 USD'
+    WHEN am.balance<= (1000*cambio_mla)  THEN '300 a 1000 USD'
+    WHEN am.balance<= (3000*cambio_mla) THEN  '1000 a 3000 USD'
+    WHEN am.balance<= (1000*cambio_mla) THEN '3000 a 10000 USD'
+    ELSE 'Mas de 10000 USD' END as ACCOUNT_MONEY
+
+  FROM meli-bi-data.SBOX_B2B_MKTPLACE.sell05_cust AS V
+  FULL OUTER JOIN meli-bi-data.SBOX_B2B_MKTPLACE.LK00_ACCOUNT_MONEY_CUST am
+  on am.cus_cust_id=V.cus_cust_id_sel
+  AND am.sit_site_id=V.sit_site_id
+  where v.SiT_SITE_ID='MLA' or am.sit_site_id='MLA'
+
+  ) ;
+
+----------------------------- 07- Traigo la primer compra del cust ------------------------------------------
+
+  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_FIRST_BUY_CUST;
+  CREATE TABLE SBOX_B2B_MKTPLACE.LK_FIRST_BUY_CUST as (
+    WITH temp_first_buy AS (
+      SELECT
+        bid.ORD_BUYER.ID cus_cust_id_buy,  
+        bid.sit_site_id,
+        MIN(bid.ORD_CLOSED_DT)  first_buy_date_gross,
+      FROM WHOWNER.BT_ORD_ORDERS AS bid
+      WHERE bid.sit_site_id IN ('MLA','MLB','MLM','MLC')
+      AND bid.ORD_GMV_FLG = True --bid.ite_gmv_flag = 1
+      AND bid.ORD_CATEGORY.MARKETPLACE_ID = 'TM' -- bid.mkt_marketplace_id = 'TM'
+      AND bid.ORD_CLOSED_DT is not null
+       --AND bid.ORD_TGMV_FLG= True --tgmv_flag = 1
+      GROUP BY 1,2
+    ),
+    temp_first_buy_tgmv AS (
+      SELECT
+        bid.ORD_BUYER.ID cus_cust_id_buy,  
+        bid.sit_site_id,
+        MIN(bid.ORD_CLOSED_DT)  first_buy_date_tgmv,
+      FROM WHOWNER.BT_ORD_ORDERS AS bid
+      WHERE bid.sit_site_id IN ('MLA','MLB','MLM','MLC')
+      AND bid.ORD_GMV_FLG = True --bid.ite_gmv_flag = 1
+      AND bid.ORD_CATEGORY.MARKETPLACE_ID = 'TM' -- bid.mkt_marketplace_id = 'TM'
+      AND bid.ORD_TGMV_FLG= True --tgmv_flag = 1
+      AND bid.ORD_CLOSED_DT is not null
+      GROUP BY 1,2
+    )
+
+    SELECT a.cus_cust_id_buy, a.sit_site_id, a.first_buy_date_gross, b.first_buy_date_tgmv 
+    FROM temp_first_buy a
+    LEFT JOIN temp_first_buy_tgmv b
+    ON a.cus_cust_id_buy = b.cus_cust_id_buy AND a.sit_site_id=b.sit_site_id
+  );
 
 /* ------------------------- Corro a nivel B2B ID ---------------------- */
 
@@ -144,7 +301,7 @@ CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.vert as (
   temp_base AS (
    SELECT 
     DISTINCT
-    coalesce(KYC_COMP_IDNT_NUMBER,cast(a.cus_cust_id as string)) b2b_id,
+    `meli-bi-data.SBOX_B2B_MKTPLACE.get_b2b_id`(KYC_COMP_IDNT_NUMBER,a.CUS_CUST_ID) b2b_id,
     a.KYC_COMP_IDNT_NUMBER,
     a.kyc_entity_type,
     a.sit_site_id,
@@ -177,7 +334,7 @@ CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.vert as (
 
   temp_corporate_name AS (
     SELECT 
-    coalesce(KYC_COMP_IDNT_NUMBER,cast(a.cus_cust_id as string)) b2b_id,
+    `meli-bi-data.SBOX_B2B_MKTPLACE.get_b2b_id`(KYC_COMP_IDNT_NUMBER,a.CUS_CUST_ID) b2b_id,
     a.KYC_COMP_IDNT_NUMBER,
     a.kyc_entity_type,
     a.KYC_COMP_CORPORATE_NAME,
@@ -209,34 +366,49 @@ CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.vert as (
 
 ----------------------------- 02- Traigo el regimen fiscal del doc------------------------------------------
 
------ BUG: REVISARRR!!!!
-  DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.LK_br_mx_doc;
-  CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.LK_br_mx_doc as (
-    SELECT
-      distinct 
-      coalesce(KYC_COMP_IDNT_NUMBER,cast(a.cus_cust_id as string)) b2b_id, 
-      a.sit_site_id,
-      a.cus_tax_payer_type,
-      a.cus_tax_regime   
-    FROM LK_TAX_CUST_WRAPPER a
-    LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
-    on a.sit_site_id=b.sit_site_id AND a.cus_cust_id=b.cus_cust_id
-    qualify row_number () over (partition by KYC_COMP_IDNT_NUMBER, a.sit_site_id ORDER BY  a.aud_upd_dt DESC) = 1
+  DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.LK_TAX_CUST_WRAPPER_DOC;
+  CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.LK_TAX_CUST_WRAPPER_DOC as (
+    WITH temp_regime AS (
+      SELECT 
+        `meli-bi-data.SBOX_B2B_MKTPLACE.get_b2b_id`(KYC_COMP_IDNT_NUMBER,a.CUS_CUST_ID) b2b_id,
+        a.cus_cust_id, 
+        a.sit_site_id,
+        a.cus_tax_payer_type,
+        a.cus_tax_regime,
+        CASE WHEN CUS_TAX_PAYER_TYPE in ('Simples Nacional - excesso de sublimite da receita','Regime Normal') THEN 1 ELSE 0 END TIPO_REGIME_ID 
+      FROM meli-bi-data.SBOX_B2B_MKTPLACE.LK_TAX_CUST_WRAPPER a
+      LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
+      ON a.sit_site_id=b.sit_site_id AND a.cus_cust_id=b.cus_cust_id
+    ),
+
+    temp_sum_tipo_regime_id AS (
+      SELECT
+        b2b_id, sit_site_id, 
+        SUM(TIPO_REGIME_ID) AS sum_tipo_regime_id
+      FROM temp_regime
+      GROUP BY b2b_id, sit_site_id
+    )
+    SELECT 
+      b2b_id,
+      sit_site_id,
+      Case WHEN sum_tipo_regime_id>0 THEN 'Regime Normal'
+      ELSE 'Simples Nacional' END AS cus_tax_payer_type
+    FROM temp_sum_tipo_regime_id
   ) ;
 
 ----------------------------- 03- Traigo la plata en cuenta de mercadopago por B2B ID ------------------------------------------
 
-  DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.LK_ACCOUNT_MONEY_DOC;
-  CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.LK_ACCOUNT_MONEY_DOC as (
+  DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.LK00_ACCOUNT_MONEY_DOC;
+  CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.LK00_ACCOUNT_MONEY_DOC as (
   WITH temp_account AS (
     SELECT
-      coalesce(KYC_COMP_IDNT_NUMBER,cast(a.cus_cust_id as string)) b2b_id, 
+      `meli-bi-data.SBOX_B2B_MKTPLACE.get_b2b_id`(KYC_COMP_IDNT_NUMBER,a.CUS_CUST_ID) b2b_id,
       b.kyc_entity_type,
       b.KYC_COMP_IDNT_NUMBER,
       a.cus_cust_id,
       a.sit_site_id,
       AVG (a.balance) balance
-    FROM  SBOX_B2B_MKTPLACE.LK_ACCOUNT_MONEY_CUST a
+    FROM  SBOX_B2B_MKTPLACE.LK00_ACCOUNT_MONEY_CUST a
     LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
     on a.sit_site_id=b.sit_site_id AND a.cus_cust_id=b.cus_cust_id
     LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
@@ -255,12 +427,13 @@ CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.vert as (
     GROUP BY  1,2,3,4
   );
 
+
 ----------------------------- 04- Traigo datos de creditos por B2B ID ------------------------------------------
 
-  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_credits;
-  CREATE TABLE SBOX_B2B_MKTPLACE.LK_credits as (
+  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_CREDITS_CUST;
+  CREATE TABLE SBOX_B2B_MKTPLACE.LK_CREDITS_CUST as (
   SELECT
-    coalesce(KYC_COMP_IDNT_NUMBER,cast(a.CUS_CUST_ID_BORROWER as string)) b2b_id, 
+    `meli-bi-data.SBOX_B2B_MKTPLACE.get_b2b_id`(KYC_COMP_IDNT_NUMBER,a.CUS_CUST_ID_BORROWER) b2b_id,
     b.kyc_entity_type,
     b.KYC_COMP_IDNT_NUMBER,
     a.CUS_CUST_ID_BORROWER CUS_CUST_ID,
@@ -279,12 +452,24 @@ CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.vert as (
 
   ) ;
 
+  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_CREDITS_DOC;
+  CREATE TABLE SBOX_B2B_MKTPLACE.LK_CREDITS_DOC as (
+  SELECT
+    b2b_id,
+    kyc_entity_type,
+    KYC_COMP_IDNT_NUMBER,
+    SIT_SITE_ID,
+    sum(total) total
+  FROM SBOX_B2B_MKTPLACE.LK_CREDITS_CUST
+  GROUP BY 1,2,3,4
+  );
+
 ----------------------------- 05- Traigo datos de seguros por B2B ID ------------------------------------------
 
-  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_seguros;
-  CREATE TABLE SBOX_B2B_MKTPLACE.LK_seguros as (
+  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_SEGUROS_CUST;
+  CREATE TABLE SBOX_B2B_MKTPLACE.LK_SEGUROS_CUST as (
   SELECT
-    coalesce(KYC_COMP_IDNT_NUMBER,cast(a.CUS_CUST_ID_buy as string)) b2b_id, 
+    `meli-bi-data.SBOX_B2B_MKTPLACE.get_b2b_id`(KYC_COMP_IDNT_NUMBER,a.CUS_CUST_ID_buy ) b2b_id,
     b.kyc_entity_type,
     b.KYC_COMP_IDNT_NUMBER,
     a.CUS_CUST_ID_buy CUS_CUST_ID,
@@ -301,12 +486,24 @@ CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.vert as (
   GROUP BY 1,2,3,4,5
   );
 
+  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_SEGUROS_DOC;
+  CREATE TABLE SBOX_B2B_MKTPLACE.LK_SEGUROS_DOC as (
+  SELECT
+    b2b_id,
+    kyc_entity_type,
+    KYC_COMP_IDNT_NUMBER,
+    SIT_SITE_ID,
+    sum(total) total
+  FROM SBOX_B2B_MKTPLACE.LK_SEGUROS_CUST
+  GROUP BY 1,2,3,4
+  );
+
 ----------------------------- 06- Traigo datos de shipping por B2B ID ------------------------------------------
 
-  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_seller_shipping;
-  CREATE TABLE SBOX_B2B_MKTPLACE.LK_seller_shipping AS (
+  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_SELLER_SHIPPING_CUST;
+  CREATE TABLE SBOX_B2B_MKTPLACE.LK_SELLER_SHIPPING_CUST AS (
   SELECT
-    coalesce(KYC_COMP_IDNT_NUMBER,cast(bid.ORD_SELLER.ID  as string)) b2b_id, 
+    coalesce('compa'||KYC_COMP_IDNT_NUMBER,'notco'||cast(bid.ORD_SELLER.ID as string)) b2b_id,
     b.kyc_entity_type,
     b.KYC_COMP_IDNT_NUMBER,
     bid.sit_site_id,
@@ -331,15 +528,63 @@ CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.vert as (
   group by 1,2,3,4,5
   ) ;
 
+
+  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_SELLER_SHIPPING_DOC;
+  CREATE TABLE SBOX_B2B_MKTPLACE.LK_SELLER_SHIPPING_DOC as (
+  SELECT
+    b2b_id,
+    kyc_entity_type,
+    KYC_COMP_IDNT_NUMBER,
+    SIT_SITE_ID,
+    sum(total) total
+  FROM SBOX_B2B_MKTPLACE.LK_SELLER_SHIPPING_CUST
+  GROUP BY 1,2,3,4
+  );
 ----------------------------- 07- Traigo datos de Loyalty por B2B ID ------------------------------------------
 
-  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_LOYALTY_doc;
-  CREATE TABLE SBOX_B2B_MKTPLACE.LK_LOYALTY_doc AS (
+  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_LOYALTY_DOC;
+  CREATE TABLE SBOX_B2B_MKTPLACE.LK_LOYALTY_DOC AS (
     SELECT 
      b2b_id,
     max(LYL_LEVEL_NUMBER) LYL_LEVEL_NUMBER
-  FROM SBOX_B2B_MKTPLACE.LK_LOYALTY_cust
+  FROM SBOX_B2B_MKTPLACE.LK_LOYALTY_CUST
   GROUP BY 1
   )  ;
 
+----------------------------- 08- Traigo primer compra por B2B ID ------------------------------------------
 
+  DROP TABLE IF EXISTS SBOX_B2B_MKTPLACE.LK_FIRST_BUY_DOC;
+  CREATE TABLE SBOX_B2B_MKTPLACE.LK_FIRST_BUY_DOC as (
+      SELECT 
+      `meli-bi-data.SBOX_B2B_MKTPLACE.get_b2b_id`(KYC_COMP_IDNT_NUMBER,a.cus_cust_id_buy) b2b_id,
+      a.sit_site_id,
+      min(a.first_buy_date_gross) first_buy_date_gross, 
+      min(a.first_buy_date_tgmv) first_buy_date_tgmv
+      FROM SBOX_B2B_MKTPLACE.LK_FIRST_BUY_CUST a
+      LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
+      ON a.sit_site_id=b.sit_site_id AND a.cus_cust_id_buy=b.cus_cust_id
+      LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA e
+      ON a.sit_site_id=e.sit_site_id_cus AND a.cus_cust_id_buy=e.cus_cust_id
+      WHERE 'sink' not in unnest(e.CUS_TAGS)  AND b.kyc_entity_type='company'
+      GROUP BY 1,2
+
+
+
+      WITH temp_first_buy AS (
+    SELECT
+ --     bid.ORD_BUYER.ID cus_cust_id_buy,  
+   --   bid.sit_site_id,
+      MIN(bid.ORD_CLOSED_DT)  first_buy_date_gross,
+
+  FROM WHOWNER.BT_ORD_ORDERS AS bid
+ WHERE bid.sit_site_id IN ('MLA','MLB','MLM','MLC')  
+    AND bid.ORD_GMV_FLG = True --bid.ite_gmv_flag = 1 
+    /*
+  AND bid.ORD_CATEGORY.MARKETPLACE_ID = 'TM' -- bid.mkt_marketplace_id = 'TM'
+  AND bid.ORD_CLOSED_DT is not null
+  --AND bid.ORD_TGMV_FLG= True --tgmv_flag = 1
+   -- GROUP BY 1,2*/
+
+    )
+    select * from temp_first_buy order by first_buy_date_gross asc limit 1000
+  );

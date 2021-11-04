@@ -135,3 +135,25 @@ CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.base_month_cust AS (
 );
 
 /* ------- 04- CREO TABLA FINAL POR B2B ID POR MES ---------*/
+
+DROP TABLE IF EXISTS meli-bi-data.SBOX_B2B_MKTPLACE.base_month_doc;
+CREATE TABLE meli-bi-data.SBOX_B2B_MKTPLACE.base_month_doc AS (
+	SELECT
+		a.TIM_YEAR,
+		a.TIM_SEMESTER_ID,
+		a.TIM_QUARTER_ID,
+		a.TIM_MONTH_ID,
+	    coalesce(b.KYC_COMP_IDNT_NUMBER,cast(a.cus_cust_id as string)) b2b_id,
+	    a.sit_site_id, 
+	    sum(a.VENTAS_USD) VENTAS_USD,
+		sum(a.q_ventas) q_ventas,
+		sum(a.TGMV_BUY) TGMV_BUY,
+		sum(a.TGMV_BUY_LC) TGMV_BUY_LC,
+		sum(a.TORDERS_BUY) TORDERS_BUY,
+		sum(a.TSI_BUY) TSI_BUY,
+		sum(a.TX_BUY) TX_BUY
+	FROM meli-bi-data.SBOX_B2B_MKTPLACE.base_month_cust a
+	LEFT JOIN WHOWNER.LK_KYC_VAULT_USER  b
+	on a.sit_site_id=b.sit_site_id AND a.cus_cust_id=b.cus_cust_id
+    GROUP BY 1,2,3,4,5,6
+);
